@@ -169,23 +169,45 @@ class WhatsAppAdminApp {
     const { number, message, typo } = data;
     
     // Find conversation by phone number
-    let conversation = this.stateManager.findConversationByNumber(number);
+    // let conversation = this.stateManager.findConversationByNumber(number);
     
+    let conversation = null;
+    // console.log('conversation', conversation);
     if (!conversation) {
-      // If conversation doesn't exist, refresh the list
-      await this.loadConversations();
-      conversation = this.stateManager.findConversationByNumber(number);
+      // If conversation doesn't exist, fetch it from API
+      // console.log(`Conversation not found for number ${number}, fetching from API...`);
+      const result = await this.apiService.fetchConversationInfo(number);
+      
+      if (result.success) {
+        // Map the conversation data and add it to state
+        const conversationData = this.apiService.mapConversationData2(result.data, this.stateManager.getState().conversations.length);
+        console.log('conversationData::::::::::::::::', conversationData);
+        this.stateManager.updateConversation(conversationData);
+        conversation = conversationData;
+        console.log(`New conversation added: ${conversation.name}`);
+      } else {
+        console.error('Failed to fetch conversation info:', result.error);
+        this.uiManager.showToast('Failed to load conversation info');
+        return;
+      }
     }
     
     if (conversation) {
+      // Map the message data properly
       const messageData = this.apiService.mapMessageData({
         id: Date.now(), // Temporary ID
         typo: typo,
         message: message
       });
       
+      // Add message to conversation
       this.stateManager.addMessage(conversation.id, messageData);
       this.uiManager.showToast(`New message from ${conversation.name}`);
+      
+      // If this is the active conversation, refresh the UI
+      if (conversation.id === this.stateManager.getState().activeConversationId) {
+        this.uiManager.renderConversationThread();
+      }
     }
   }
 

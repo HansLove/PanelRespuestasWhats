@@ -44,9 +44,12 @@ class ApiService {
    */
   async fetchConversationInfo(phoneNumber) {
     try {
+      console.log('fetching conversation info for', phoneNumber);
+      console.log('To the URL:', `${this.config.API_BASE}${this.config.ENDPOINTS.GET_CONVERSATION_INFO}/${phoneNumber}`);
       const response = await fetch(`${this.config.API_BASE}${this.config.ENDPOINTS.GET_CONVERSATION_INFO}/${phoneNumber}`);
       const data = await response.json();
       
+      console.log('data::::::::::::::::', data);
       if (data.status === 200) {
         return {
           success: true,
@@ -111,6 +114,7 @@ class ApiService {
    * @returns {Object} Mapped conversation data
    */
   mapConversationData(number, index) {
+    console.log('number::::::::::::::::', number);
     return {
       id: `c${index + 1}`,
       name: number.name,
@@ -124,6 +128,25 @@ class ApiService {
       messages: (number.history || []).map(msg => this.mapMessageData(msg))
     };
   }
+
+  mapConversationData2(number, index) {
+    console.log('number::::::::::::::::', number);
+    console.log('index::::::::::::::::', index);
+    return {
+      // id: `c${index + 1}`,
+      id: `c${index}`,
+      name: number.number.name,
+      initials: this.getInitials(number.number.name),
+      number: number.number.number,
+      src: 'Whats',
+      tags: [...this.config.DEFAULT_TAGS],
+      unread: 0,
+      needsAttention: !number.number.interview,
+      interview: number.number.interview,
+      messages: (number.number.history || []).map(msg => this.mapMessageData(msg))
+    };
+  }
+
 
   /**
    * Map message data from API response to internal format
@@ -150,7 +173,7 @@ class ApiService {
    * @returns {string} Initials
    */
   getInitials(name) {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    return name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   }
 }
 

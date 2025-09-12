@@ -149,14 +149,13 @@ class UIManager {
    * Render conversation list
    */
   renderConversationList() {
-    console.log('Rendering conversation list...');
     if (!this.elements.chatList) {
       console.error('Chat list element not found');
       return;
     }
 
     const state = this.stateManager.getState();
-    console.log('Current state:', state);
+
     
     if (state.isLoading) {
       this.elements.chatList.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--muted);">Loading conversations...</div>';
