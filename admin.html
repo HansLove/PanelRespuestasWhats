@@ -41,6 +41,12 @@
     .in{align-self:flex-start;background:var(--incoming)}
     .out{align-self:flex-end;background:var(--outgoing)}
     .stamp{font-size:11px;color:#b7c7ce;opacity:.85;margin-top:2px}
+    
+    /* Message type indicators */
+    .msg[data-type="1"] { border-left: 3px solid #53bdeb; } /* Bot template */
+    .msg[data-type="2"] { border-left: 3px solid #00a884; } /* Client */
+    .msg[data-type="3"] { border-left: 3px solid #ffd166; } /* AI */
+    .msg[data-type="4"] { border-left: 3px solid #ff6b6b; } /* Admin */
 
     /* composer */
     .composer{display:grid;grid-template-columns: 1fr auto auto;gap:8px;padding:10px;border-top:1px solid var(--line);background:var(--panel)}
@@ -70,6 +76,7 @@
   <aside class="sidebar">
     <div class="left-head">
       <input id="search" placeholder="Search or filter (name, tag)..." />
+      <button class="ghost" id="refresh" style="padding: 8px; font-size: 12px;">🔄</button>
     </div>
     <div class="tabs">
       <div class="tab active" data-filter="all">All</div>
@@ -101,7 +108,9 @@
     <div class="right-head">Contact Card</div>
     <div class="section" id="profile">
       <div class="row"><span>Source</span><span id="src">Whats</span></div>
+      <div class="row"><span>Phone</span><span id="phone">—</span></div>
       <div class="row"><span>Status</span><span id="status">Bot active</span></div>
+      <div class="row"><span>Interview</span><span id="interview">—</span></div>
       <div class="row"><span>Last message</span><span id="last">—</span></div>
       <div class="row"><span>Time zone</span><span id="tz">UTC−6</span></div>
       <div style="margin-top:8px">
@@ -121,11 +130,21 @@
     </div>
 
     <div class="section">
+      <div style="font-weight:600;margin-bottom:6px">Message Types</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.4">
+        <div style="display:flex;align-items:center;margin:4px 0"><span style="width:12px;height:3px;background:#53bdeb;margin-right:6px"></span>Bot Template</div>
+        <div style="display:flex;align-items:center;margin:4px 0"><span style="width:12px;height:3px;background:#00a884;margin-right:6px"></span>Client Message</div>
+        <div style="display:flex;align-items:center;margin:4px 0"><span style="width:12px;height:3px;background:#ffd166;margin-right:6px"></span>AI Response</div>
+        <div style="display:flex;align-items:center;margin:4px 0"><span style="width:12px;height:3px;background:#ff6b6b;margin-right:6px"></span>Admin Intervention</div>
+      </div>
+    </div>
+
+    <div class="section">
       <div style="font-weight:600;margin-bottom:6px">Quick Actions</div>
       <div class="buttons">
-        <button class="ghost" data-quick="Thanks for the reply — here’s our Telegram channel: https://t.me/tradetabofficial">Invite to Telegram</button>
-        <button class="ghost" data-quick="All good — we’ll keep you posted with neutral market commentary only.">Confirm subscription</button>
-        <button class="ghost" data-quick="Understood. I’ve removed you from the list. You can rejoin anytime.">Unsubscribe</button>
+        <button class="ghost" data-quick="Thanks for the reply — here's our Telegram channel: https://t.me/tradetabofficial">Invite to Telegram</button>
+        <button class="ghost" data-quick="All good — we'll keep you posted with neutral market commentary only.">Confirm subscription</button>
+        <button class="ghost" data-quick="Understood. I've removed you from the list. You can rejoin anytime.">Unsubscribe</button>
       </div>
     </div>
   </aside>
@@ -134,31 +153,129 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// --- Mock store --- //
-const MOCK = [
-  {id:'c1', name:'Marco Trader', initials:'MT', src:'Whats', tags:['fx','vip'], unread:2, needsAttention:true,
-    messages:[
-      {from:'them', t:'Hey, who is this?'},
-      {from:'bot', t:"Hey mate, it’s Hans from TradeTab. Please keep this number private. All good with your trading?"},
-      {from:'them', t:'Yes, I trade London open.'}
-    ]},
-  {id:'c2', name:'Alice FX', initials:'AF', src:'Telegram', tags:['fx'], unread:0, needsAttention:false,
-    messages:[{from:'bot', t:'Thanks for joining. Here is the channel: https://t.me/tradetabofficial'}]},
-  {id:'c3', name:'Cedric', initials:'C', src:'Whats', tags:['lead'], unread:1, needsAttention:true,
-    messages:[{from:'them', t:'Stop sending signals please.'}]}
-];
+// --- API Configuration --- //
+const API_BASE = 'https://broadcast-system-d7ca773e62c8.herokuapp.com';
 
-let state = { list:[...MOCK], activeId: 'c1', manual:false };
+// Message type mapping
+const MESSAGE_TYPES = {
+  1: { from: 'bot', label: '🤖 Bot', color: 'out' },      // Generated template message
+  2: { from: 'them', label: '👤 Client', color: 'in' },   // Client answers
+  3: { from: 'bot', label: '🤖 AI', color: 'out' },       // AI responses
+  4: { from: 'admin', label: '👨‍💼 Admin', color: 'out' }  // Admin intervention
+};
+
+let state = { list: [], activeId: null, manual: false, loading: false };
 
 // --- Helpers --- //
 const $ = (id)=>document.getElementById(id);
-function toast(msg){ const t=$('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',1600);} 
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',1600);}
+
+// --- API Functions --- //
+async function fetchConversations() {
+  try {
+    state.loading = true;
+    const response = await fetch(`${API_BASE}/m/get/all`);
+    const data = await response.json();
+    
+    if (data.status === 200) {
+      state.list = data.numbers.map((number, index) => ({
+        id: `c${index + 1}`,
+        name: number.name,
+        initials: getInitials(number.name),
+        number: number.number,
+        src: 'Whats',
+        tags: ['lead', 'fx'],
+        unread: 0,
+        needsAttention: !number.interview,
+        interview: number.interview,
+        messages: number.history.map(msg => ({
+          id: msg.id,
+          from: MESSAGE_TYPES[msg.typo]?.from || 'unknown',
+          type: msg.typo,
+          label: MESSAGE_TYPES[msg.typo]?.label || 'Unknown',
+          color: MESSAGE_TYPES[msg.typo]?.color || 'in',
+          text: msg.message,
+          timestamp: new Date() // You might want to add timestamp to your API
+        }))
+      }));
+      
+      if (state.list.length > 0 && !state.activeId) {
+        state.activeId = state.list[0].id;
+      }
+      
+      renderList();
+      renderHeader();
+      renderThread();
+    } else {
+      toast('Error loading conversations');
+    }
+  } catch (error) {
+    console.error('Error fetching conversations:', error);
+    toast('Failed to load conversations');
+  } finally {
+    state.loading = false;
+  }
+}
+
+function getInitials(name) {
+  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+}
+
+async function sendIntervention(contactId, message) {
+  try {
+    const contact = state.list.find(c => c.id === contactId);
+    if (!contact) return;
+    
+    console.log("contact.number", contact.number, "message", message);
+
+    const response = await fetch(`${API_BASE}/m/send/to/number`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        number: contact.number,
+        message: message
+      })
+    });
+    
+    if (response.ok) {
+      // Add message to local state
+      contact.messages.push({
+        id: Date.now(),
+        from: 'admin',
+        type: 4,
+        label: '👨‍💼 Admin',
+        color: 'out',
+        text: message,
+        timestamp: new Date()
+      });
+      
+      renderThread();
+      toast('Message sent successfully');
+    } else {
+      toast('Failed to send message');
+    }
+  } catch (error) {
+    console.error('Error sending intervention:', error);
+    toast('Failed to send message');
+  }
+} 
 
 function renderList(){
   const box = $('chatlist');
   const q = $('search').value.toLowerCase();
   const active = state.activeId;
   box.innerHTML='';
+  
+  if (state.loading) {
+    box.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--muted);">Loading conversations...</div>';
+    return;
+  }
+  
+  if (state.list.length === 0) {
+    box.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--muted);">No conversations found</div>';
+    return;
+  }
+  
   state.list
     .filter(c=> c.name.toLowerCase().includes(q) || c.tags.some(t=>t.includes(q)))
     .forEach(c=>{
@@ -167,7 +284,7 @@ function renderList(){
         <div class="avatar">${c.initials}</div>
         <div>
           <div class="title">${c.name}</div>
-          <div class="meta">${c.src} • ${c.tags.join(', ')}</div>
+          <div class="meta">${c.src} • ${c.messages.length} messages • ${c.tags.join(', ')}</div>
         </div>
         <div>${c.unread?`<span class="badge unread">${c.unread}</span>`:c.needsAttention?'<span class="badge">⚑</span>':''}</div>`;
       row.onclick = ()=>{ state.activeId=c.id; renderThread(); renderHeader(); document.querySelectorAll('.item').forEach(i=>i.style.background=''); row.style.background='#0f1f26'; };
@@ -182,6 +299,8 @@ function renderHeader(){
   $('who').textContent = c.name;
   $('av').textContent = c.initials;
   $('src').textContent = c.src;
+  $('phone').textContent = c.number || '—';
+  $('interview').textContent = c.interview ? 'Completed' : 'Pending';
   $('status').textContent = state.manual? 'Operator active' : 'Bot active';
   $('chips').innerHTML = '';
   c.tags.forEach(t=>{ const el=document.createElement('span'); el.className='chip'; el.textContent=t; $('chips').appendChild(el); });
@@ -191,26 +310,27 @@ function renderThread(){
   const c = state.list.find(x=>x.id===state.activeId);
   if(!c) return;
   const area = $('area'); area.innerHTML='';
-  c.messages.forEach(m=>{
-    const div = document.createElement('div'); div.className = 'msg '+(m.from==='them'?'in':'out');
-    div.innerHTML = `${m.t.replace(/</g,'&lt;')}` + `<div class="stamp">${m.from==='bot'?'🤖 Bot':'👤 You'}</div>`;
+  
+  // Sort messages by ID to maintain chronological order
+  const sortedMessages = [...c.messages].sort((a, b) => a.id - b.id);
+  
+  sortedMessages.forEach(m=>{
+    const div = document.createElement('div'); 
+    div.className = `msg ${m.color}`;
+    div.setAttribute('data-type', m.type);
+    div.innerHTML = `${m.text.replace(/</g,'&lt;').replace(/\n/g,'<br>')}` + `<div class="stamp">${m.label}</div>`;
     area.appendChild(div);
   });
+  
   $('last').textContent = new Date().toLocaleString();
   area.scrollTop = area.scrollHeight;
 }
 
-function sendManual(text){
+async function sendManual(text){
   const c = state.list.find(x=>x.id===state.activeId);
   if(!c) return;
-  c.messages.push({from:'you', t:text});
-  renderThread();
-
-  // POST to backend (replace route when wiring to 8n8)
-  fetch('/api/broadcast/intervene', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ contact_id:c.id, channel:c.src, message:text })
-  }).catch(()=>{});
+  
+  await sendIntervention(c.id, text);
 }
 
 // --- Events --- //
@@ -222,6 +342,7 @@ $('send').onclick = ()=>{
 
 $('toggle').onclick = ()=>{ state.manual=!state.manual; renderHeader(); toast(state.manual?'You have control':'Bot reactivated'); };
 $('search').oninput = renderList;
+$('refresh').onclick = ()=>{ fetchConversations(); toast('Refreshing conversations...'); };
 $('quick').onclick = ()=>{
   const options = [
     "Hey, it’s Hans from TradeTab. Please keep this number private. All good with your trading?",
@@ -242,9 +363,7 @@ $('open8n8').onclick = ()=>{ toast('Open in 8n8 (pending integration)'); };
 $('viewThread').onclick = ()=>{ toast('Open conversation in source (pending)'); };
 
 // init
-renderList();
-renderHeader();
-renderThread();
+fetchConversations();
 </script>
 </body>
 </html>
