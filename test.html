@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test API Integration</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
+        .conversation { border: 1px solid #ddd; margin: 10px 0; padding: 15px; border-radius: 5px; }
+        .message { margin: 5px 0; padding: 8px; border-radius: 4px; }
+        .type-1 { background: #e3f2fd; border-left: 3px solid #53bdeb; }
+        .type-2 { background: #e8f5e8; border-left: 3px solid #00a884; }
+        .type-3 { background: #fff3e0; border-left: 3px solid #ffd166; }
+        .type-4 { background: #ffebee; border-left: 3px solid #ff6b6b; }
+        .meta { font-size: 12px; color: #666; margin-top: 5px; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; margin: 5px; }
+        button:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WhatsApp Admin Panel - API Test</h1>
+        <button onclick="testAPI()">Test API Connection</button>
+        <button onclick="testSocket()">Test Socket Connection</button>
+        <div id="results"></div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script>
+        const API_BASE = 'https://broadcast-system-d7ca773e62c8.herokuapp.com';
+        
+        async function testAPI() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<p>Testing API connection...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/m/get/all`);
+                const data = await response.json();
+                
+                if (data.status === 200) {
+                    results.innerHTML = `
+                        <h3>✅ API Connection Successful</h3>
+                        <p>Found ${data.numbers.length} conversations:</p>
+                        ${data.numbers.map(conv => `
+                            <div class="conversation">
+                                <h4>${conv.name} (${conv.number})</h4>
+                                <p>Interview: ${conv.interview ? 'Completed' : 'Pending'}</p>
+                                <p>Messages: ${conv.history.length}</p>
+                                ${conv.history.map(msg => `
+                                    <div class="message type-${msg.typo}">
+                                        <strong>Type ${msg.typo}:</strong> ${msg.message.substring(0, 100)}${msg.message.length > 100 ? '...' : ''}
+                                        <div class="meta">ID: ${msg.id}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `).join('')}
+                    `;
+                } else {
+                    results.innerHTML = `<p>❌ API Error: ${data.message}</p>`;
+                }
+            } catch (error) {
+                results.innerHTML = `<p>❌ Connection Error: ${error.message}</p>`;
+            }
+        }
+        
+        function testSocket() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<p>Testing Socket connection...</p>';
+            
+            try {
+                const socket = io(API_BASE);
+                
+                socket.on('connect', () => {
+                    results.innerHTML += '<p>✅ Socket Connected Successfully</p>';
+                });
+                
+                socket.on('disconnect', () => {
+                    results.innerHTML += '<p>❌ Socket Disconnected</p>';
+                });
+                
+                socket.on('recibedMessage', (data) => {
+                    results.innerHTML += `<p>📨 New message received: ${JSON.stringify(data)}</p>`;
+                });
+                
+                socket.on('IAsendMessage', (data) => {
+                    results.innerHTML += `<p>🤖 AI message sent: ${JSON.stringify(data)}</p>`;
+                });
+                
+                socket.on('sendMessage', (data) => {
+                    results.innerHTML += `<p>✅ Message sent: ${JSON.stringify(data)}</p>`;
+                });
+                
+                setTimeout(() => {
+                    if (socket.connected) {
+                        results.innerHTML += '<p>✅ Socket connection test completed</p>';
+                    } else {
+                        results.innerHTML += '<p>❌ Socket connection failed</p>';
+                    }
+                }, 3000);
+                
+            } catch (error) {
+                results.innerHTML += `<p>❌ Socket Error: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

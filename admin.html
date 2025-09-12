@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Broadcast Ops Console — Admin</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
   <style>
     :root{
       --bg:#0b141a; --panel:#111b21; --ink:#e9edef; --muted:#aebac1; --accent:#53bdeb; --line:#1f2c34;
@@ -77,6 +78,7 @@
     <div class="left-head">
       <input id="search" placeholder="Search or filter (name, tag)..." />
       <button class="ghost" id="refresh" style="padding: 8px; font-size: 12px;">🔄</button>
+      <div id="connection-status" style="width: 8px; height: 8px; border-radius: 50%; background: #666; margin-left: 4px;" title="Connection status"></div>
     </div>
     <div class="tabs">
       <div class="tab active" data-filter="all">All</div>
@@ -165,10 +167,105 @@ const MESSAGE_TYPES = {
 };
 
 let state = { list: [], activeId: null, manual: false, loading: false };
+let socket = null;
 
 // --- Helpers --- //
 const $ = (id)=>document.getElementById(id);
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',1600);}
+
+function updateConnectionStatus(connected) {
+  const status = $('connection-status');
+  if (connected) {
+    status.style.background = '#00a884';
+    status.title = 'Connected to real-time updates';
+  } else {
+    status.style.background = '#ff6b6b';
+    status.title = 'Disconnected from real-time updates';
+  }
+}
+
+// --- Socket.IO Functions --- //
+function initSocket() {
+  try {
+    socket = io(API_BASE);
+    
+    socket.on('connect', () => {
+      console.log('Connected to server');
+      toast('Connected to real-time updates');
+      updateConnectionStatus(true);
+    });
+    
+    socket.on('disconnect', () => {
+      console.log('Disconnected from server');
+      toast('Disconnected from real-time updates');
+      updateConnectionStatus(false);
+    });
+    
+    socket.on('recibedMessage', (data) => {
+      console.log('New message received:', data);
+      handleNewMessage(data);
+    });
+
+    socket.on('IAsendMessage', (data) => {
+      console.log('New message sent by AI:', data);
+      handleNewMessage(data);
+    });
+    
+    socket.on('conversation_updated', (data) => {
+      console.log('Conversation updated:', data);
+      fetchConversations(); // Refresh the entire list
+    });
+    
+    socket.on('user_typing', (data) => {
+      console.log('User typing:', data);
+      // You could add a typing indicator here
+    });
+    
+    socket.on('sendMessage', (data) => {
+      console.log('Message sent successfully:', data);
+      toast('Message sent successfully');
+    });
+    
+  } catch (error) {
+    console.error('Socket connection error:', error);
+  }
+}
+
+async function handleNewMessage(data) {
+  const { number, message, typo } = data;
+
+  
+  const response = await fetch(`${API_BASE}/m/get/info/${data.number}`);
+  
+
+  
+  // Find the conversation by phone number
+  const conversation = state.list.find(c => c.number === number);
+  if (conversation) {
+    // Add the new message to the conversation
+    const newMessage = {
+      id: Date.now(), // Temporary ID, should be provided by backend
+      from: MESSAGE_TYPES[typo]?.from || 'unknown',
+      type: typo,
+      label: MESSAGE_TYPES[typo]?.label || 'Unknown',
+      color: MESSAGE_TYPES[typo]?.color || 'in',
+      text: message,
+      timestamp: new Date()
+    };
+    
+    conversation.messages.push(newMessage);
+    
+    // Update the UI if this conversation is currently active
+    if (state.activeId === conversation.id) {
+      renderThread();
+    }
+    
+    // Update the conversation list
+    renderList();
+    
+    toast(`New message from ${conversation.name}`);
+  }
+}
 
 // --- API Functions --- //
 async function fetchConversations() {
@@ -176,7 +273,7 @@ async function fetchConversations() {
     state.loading = true;
     const response = await fetch(`${API_BASE}/m/get/all`);
     const data = await response.json();
-    
+
     if (data.status === 200) {
       state.list = data.numbers.map((number, index) => ({
         id: `c${index + 1}`,
@@ -188,7 +285,7 @@ async function fetchConversations() {
         unread: 0,
         needsAttention: !number.interview,
         interview: number.interview,
-        messages: number.history.map(msg => ({
+        messages: (number.history || []).map(msg => ({
           id: msg.id,
           from: MESSAGE_TYPES[msg.typo]?.from || 'unknown',
           type: msg.typo,
@@ -276,9 +373,14 @@ function renderList(){
     return;
   }
   
-  state.list
-    .filter(c=> c.name.toLowerCase().includes(q) || c.tags.some(t=>t.includes(q)))
-    .forEach(c=>{
+  const filteredList = state.list.filter(c => {
+    const matchesName = c.name.toLowerCase().includes(q);
+    const matchesTags = c.tags.some(t => t.toLowerCase().includes(q));
+    const matchesNumber = c.number && c.number.includes(q);
+    return matchesName || matchesTags || matchesNumber;
+  });
+  
+  filteredList.forEach(c=>{
       const row = document.createElement('div'); row.className='item'; row.dataset.id=c.id;
       row.innerHTML = `
         <div class="avatar">${c.initials}</div>
@@ -286,7 +388,7 @@ function renderList(){
           <div class="title">${c.name}</div>
           <div class="meta">${c.src} • ${c.messages.length} messages • ${c.tags.join(', ')}</div>
         </div>
-        <div>${c.unread?`<span class="badge unread">${c.unread}</span>`:c.needsAttention?'<span class="badge">⚑</span>':''}</div>`;
+        <div>${c.unread?`<span class="badge unread">${c.unread}</span>`:c.needsAttention?'<span class="badge">⚑</span>':c.messages.length === 0?'<span class="badge" style="background:#666">New</span>':''}</div>`;
       row.onclick = ()=>{ state.activeId=c.id; renderThread(); renderHeader(); document.querySelectorAll('.item').forEach(i=>i.style.background=''); row.style.background='#0f1f26'; };
       if(c.id===active) row.style.background='#0f1f26';
       box.appendChild(row);
@@ -311,14 +413,30 @@ function renderThread(){
   if(!c) return;
   const area = $('area'); area.innerHTML='';
   
+  // Check if conversation has no messages
+  if (c.messages.length === 0) {
+    const emptyDiv = document.createElement('div');
+    emptyDiv.style.cssText = 'text-align: center; padding: 40px 20px; color: var(--muted);';
+    emptyDiv.innerHTML = `
+      <div style="font-size: 48px; margin-bottom: 16px;">💬</div>
+      <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">No messages yet</div>
+      <div style="font-size: 14px;">Start a conversation with ${c.name}</div>
+      <div style="font-size: 12px; margin-top: 8px; opacity: 0.7;">Click "Take control" and send a message</div>
+    `;
+    area.appendChild(emptyDiv);
+    $('last').textContent = 'No messages';
+    return;
+  }
+  
   // Sort messages by ID to maintain chronological order
   const sortedMessages = [...c.messages].sort((a, b) => a.id - b.id);
   
+  console.log('sortedMessages', sortedMessages);
   sortedMessages.forEach(m=>{
     const div = document.createElement('div'); 
     div.className = `msg ${m.color}`;
     div.setAttribute('data-type', m.type);
-    div.innerHTML = `${m.text.replace(/</g,'&lt;').replace(/\n/g,'<br>')}` + `<div class="stamp">${m.label}</div>`;
+    div.innerHTML = `${m.text?.replace(/</g,'&lt;').replace(/\n/g,'<br>')}` + `<div class="stamp">${m.label}</div>`;
     area.appendChild(div);
   });
   
@@ -364,6 +482,7 @@ $('viewThread').onclick = ()=>{ toast('Open conversation in source (pending)'); 
 
 // init
 fetchConversations();
+initSocket();
 </script>
 </body>
 </html>
