@@ -1,0 +1,37 @@
+{
+  "name": "whatsapp-admin-panel",
+  "version": "1.0.0",
+  "description": "Modular WhatsApp Admin Panel for managing conversations and interventions",
+  "main": "js/app.js",
+  "scripts": {
+    "start": "npx http-server . -p 8080 -o",
+    "dev": "npx http-server . -p 8080 -o --cors",
+    "build": "node build.js",
+    "build:serve": "npm run build && npx http-server dist -p 8080 -o",
+    "test": "echo 'No tests specified'"
+  },
+  "keywords": [
+    "whatsapp",
+    "admin",
+    "panel",
+    "chat",
+    "socket.io",
+    "modular"
+  ],
+  "author": "Aaron Tolentino",
+  "license": "MIT",
+  "devDependencies": {
+    "http-server": "^14.1.1"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.7.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-username/whatsapp-admin-panel.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/whatsapp-admin-panel/issues"
+  },
+  "homepage": "https://github.com/your-username/whatsapp-admin-panel#readme"
+}
