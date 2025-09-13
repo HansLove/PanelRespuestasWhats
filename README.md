@@ -1,3 +1,7 @@
+- Agregar nuevo numero
+- Envios masivos? 
+
+
 # WhatsApp Admin Panel - Modular Version
 
 A modular, maintainable WhatsApp admin panel for managing conversations and interventions.

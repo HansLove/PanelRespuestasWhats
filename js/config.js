@@ -11,7 +11,7 @@ const CONFIG = {
   ENDPOINTS: {
     GET_ALL_CONVERSATIONS: '/m/get/all',
     GET_CONVERSATION_INFO: '/m/get/info',
-    SEND_INTERVENTION: '/m/send/to/number'
+    SEND_INTERVENTION: '/m/send/to/single/number'
   },
   
   // Message Types Mapping
