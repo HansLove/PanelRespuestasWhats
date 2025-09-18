@@ -8,6 +8,13 @@ class UIManager {
     this.config = config;
     this.stateManager = stateManager;
     this.elements = {};
+    this.virtualScrolling = {
+      enabled: false,
+      itemHeight: 60, // Average message height
+      visibleItems: 50, // Number of items to render
+      scrollTop: 0,
+      totalHeight: 0
+    };
     
     this.initializeElements();
     this.setupEventListeners();
@@ -21,6 +28,7 @@ class UIManager {
       // Left sidebar
       searchInput: document.getElementById('search'),
       refreshButton: document.getElementById('refresh'),
+      helpButton: document.getElementById('help'),
       connectionStatus: document.getElementById('connection-status'),
       chatList: document.getElementById('chatlist'),
       
@@ -45,7 +53,10 @@ class UIManager {
       saveNoteButton: document.getElementById('saveNote'),
       
       // Toast
-      toast: document.getElementById('toast')
+      toast: document.getElementById('toast'),
+      
+      // Scroll indicator
+      scrollIndicator: document.getElementById('scroll-indicator')
     };
   }
 
@@ -64,6 +75,13 @@ class UIManager {
     if (this.elements.refreshButton) {
       this.elements.refreshButton.addEventListener('click', () => {
         this.emit('refresh');
+      });
+    }
+
+    // Help button
+    if (this.elements.helpButton) {
+      this.elements.helpButton.addEventListener('click', () => {
+        this.showHelpModal();
       });
     }
 
@@ -113,6 +131,89 @@ class UIManager {
         }
       });
     }
+
+    // Global keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      this.handleKeyboardShortcuts(e);
+    });
+
+    // Performance optimization: Debounced scroll handler
+    this.debouncedScrollHandler = this.debounce(() => {
+      this.handleScroll();
+    }, 16); // ~60fps
+
+    // Setup scroll optimization
+    if (this.elements.threadArea) {
+      this.elements.threadArea.addEventListener('scroll', this.debouncedScrollHandler);
+    }
+
+    // Mobile sidebar toggle
+    this.setupMobileSidebar();
+
+    // Setup scroll indicator
+    if (this.elements.scrollIndicator) {
+      this.elements.scrollIndicator.addEventListener('click', () => {
+        this.scrollToBottom(true);
+      });
+    }
+  }
+
+  /**
+   * Handle keyboard shortcuts
+   * @param {KeyboardEvent} e - Keyboard event
+   */
+  handleKeyboardShortcuts(e) {
+    // Ctrl/Cmd + R: Refresh conversations
+    if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+      e.preventDefault();
+      this.emit('refresh');
+      return;
+    }
+
+    // Ctrl/Cmd + T: Toggle manual mode
+    if ((e.ctrlKey || e.metaKey) && e.key === 't') {
+      e.preventDefault();
+      this.emit('toggleManualMode');
+      return;
+    }
+
+    // Ctrl/Cmd + F: Focus search
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      e.preventDefault();
+      if (this.elements.searchInput) {
+        this.elements.searchInput.focus();
+        this.elements.searchInput.select();
+      }
+      return;
+    }
+
+    // Escape: Clear search or focus message input
+    if (e.key === 'Escape') {
+      if (this.elements.searchInput && this.elements.searchInput.value) {
+        this.elements.searchInput.value = '';
+        this.stateManager.setSearchQuery('');
+      } else if (this.elements.messageInput) {
+        this.elements.messageInput.focus();
+      }
+      return;
+    }
+
+    // Ctrl/Cmd + End: Scroll to bottom
+    if ((e.ctrlKey || e.metaKey) && e.key === 'End') {
+      e.preventDefault();
+      this.scrollToBottom(true);
+      return;
+    }
+
+    // ? key: Show help modal
+    if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Only if not typing in an input
+      if (!['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
+        e.preventDefault();
+        this.showHelpModal();
+        return;
+      }
+    }
   }
 
   /**
@@ -129,6 +230,7 @@ class UIManager {
 
     this.emit('sendMessage', message);
     this.elements.messageInput.value = '';
+    this.hideTypingIndicator();
   }
 
   /**
@@ -236,6 +338,10 @@ class UIManager {
     const conversation = this.stateManager.getActiveConversation();
     if (!conversation) return;
 
+    // Store current scroll position to maintain scroll position when appropriate
+    const wasAtBottom = this.isScrolledToBottom();
+    const previousScrollHeight = this.elements.threadArea.scrollHeight;
+
     this.elements.threadArea.innerHTML = '';
 
     if (conversation.messages.length === 0) {
@@ -245,12 +351,43 @@ class UIManager {
 
     const sortedMessages = [...conversation.messages].sort((a, b) => a.id - b.id);
     
-    sortedMessages.forEach(message => {
-      const messageElement = this.createMessageElement(message);
-      this.elements.threadArea.appendChild(messageElement);
-    });
+    // Create message container for better scroll management
+    const messageContainer = document.createElement('div');
+    messageContainer.className = 'message-container';
+    
+    // Enable virtual scrolling for large message lists
+    if (sortedMessages.length > 100) {
+      this.renderVirtualScrollMessages(messageContainer, sortedMessages);
+    } else {
+      // Standard rendering for smaller lists
+      sortedMessages.forEach((message, index) => {
+        const messageElement = this.createMessageElement(message);
+        
+        // Add staggered animation for initial load (only for reasonable amounts)
+        if (conversation.messages.length > 10 && conversation.messages.length < 50) {
+          messageElement.style.opacity = '0';
+          messageElement.style.transform = 'translateY(10px)';
+          setTimeout(() => {
+            messageElement.style.transition = 'all 0.3s ease';
+            messageElement.style.opacity = '1';
+            messageElement.style.transform = 'translateY(0)';
+          }, Math.min(index * 30, 300));
+        }
+        
+        messageContainer.appendChild(messageElement);
+      });
+    }
+    
+    this.elements.threadArea.appendChild(messageContainer);
 
-    this.elements.threadArea.scrollTop = this.elements.threadArea.scrollHeight;
+    // Force scroll to bottom after rendering - multiple attempts for reliability
+    requestAnimationFrame(() => {
+      this.scrollToBottom(false);
+      
+      // Additional attempts to ensure scroll works
+      setTimeout(() => this.scrollToBottom(false), 100);
+      setTimeout(() => this.scrollToBottom(false), 300);
+    });
   }
 
   /**
@@ -278,7 +415,27 @@ class UIManager {
     const div = document.createElement('div');
     div.className = `msg ${message.color}`;
     div.setAttribute('data-type', message.type);
-    div.innerHTML = `${message.text?.replace(/</g, '&lt;').replace(/\n/g, '<br>') || ''}<div class="stamp">${message.label}</div>`;
+    div.setAttribute('data-message-id', message.id);
+    
+    // Add message content with better formatting
+    const messageText = message.text?.replace(/</g, '&lt;').replace(/\n/g, '<br>') || '';
+    const timestamp = this.formatTimestamp(message.timestamp);
+    
+    div.innerHTML = `
+      <div class="message-content">${messageText}</div>
+      <div class="stamp">${message.label} • ${timestamp}</div>
+    `;
+    
+    // Add hover effects for better UX
+    div.addEventListener('mouseenter', () => {
+      div.style.transform = 'scale(1.01)';
+      div.style.transition = 'transform 0.2s ease';
+    });
+    
+    div.addEventListener('mouseleave', () => {
+      div.style.transform = 'scale(1)';
+    });
+    
     return div;
   }
 
@@ -347,6 +504,326 @@ class UIManager {
   }
 
   /**
+   * Check if scroll is at bottom
+   * @returns {boolean} Whether scrolled to bottom
+   */
+  isScrolledToBottom() {
+    if (!this.elements.threadArea) return false;
+    const threshold = 50; // pixels from bottom
+    return this.elements.threadArea.scrollHeight - this.elements.threadArea.scrollTop - this.elements.threadArea.clientHeight < threshold;
+  }
+
+  /**
+   * Scroll to bottom with animation
+   * @param {boolean} smooth - Whether to use smooth scrolling
+   */
+  scrollToBottom(smooth = true) {
+    if (!this.elements.threadArea) return;
+    
+    // Force scroll to bottom - multiple methods for better compatibility
+    const scrollTop = this.elements.threadArea.scrollHeight - this.elements.threadArea.clientHeight;
+    
+    if (smooth) {
+      // Smooth scroll with fallback
+      if (this.elements.threadArea.scrollTo) {
+        this.elements.threadArea.scrollTo({
+          top: scrollTop,
+          behavior: 'smooth'
+        });
+      } else {
+        // Fallback for older browsers
+        this.elements.threadArea.scrollTop = scrollTop;
+      }
+    } else {
+      // Instant scroll
+      this.elements.threadArea.scrollTop = scrollTop;
+    }
+    
+    // Additional fallback - ensure we're at the bottom
+    setTimeout(() => {
+      this.elements.threadArea.scrollTop = this.elements.threadArea.scrollHeight;
+    }, 50);
+  }
+
+  /**
+   * Add new message with animation
+   * @param {Object} message - Message data
+   */
+  addMessageWithAnimation(message) {
+    if (!this.elements.threadArea) return;
+    
+    const messageContainer = this.elements.threadArea.querySelector('.message-container');
+    if (!messageContainer) {
+      this.renderConversationThread();
+      return;
+    }
+    
+    const wasAtBottom = this.isScrolledToBottom();
+    const messageElement = this.createMessageElement(message);
+    
+    // Add entrance animation
+    messageElement.style.opacity = '0';
+    messageElement.style.transform = 'translateY(20px) scale(0.95)';
+    messageElement.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+    
+    messageContainer.appendChild(messageElement);
+    
+    // Trigger animation
+    requestAnimationFrame(() => {
+      messageElement.style.opacity = '1';
+      messageElement.style.transform = 'translateY(0) scale(1)';
+    });
+    
+    // Always scroll to bottom for new messages - force it
+    setTimeout(() => {
+      this.scrollToBottom(true);
+    }, 100);
+  }
+
+  /**
+   * Show new message indicator
+   */
+  showNewMessageIndicator() {
+    const indicator = document.createElement('div');
+    indicator.className = 'new-message-indicator';
+    indicator.innerHTML = '↓ New message';
+    indicator.style.cssText = `
+      position: absolute;
+      bottom: 80px;
+      right: 20px;
+      background: var(--accent);
+      color: white;
+      padding: 8px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      cursor: pointer;
+      z-index: 1000;
+      animation: slideInUp 0.3s ease;
+    `;
+    
+    indicator.addEventListener('click', () => {
+      this.scrollToBottom(true);
+      indicator.remove();
+    });
+    
+    document.body.appendChild(indicator);
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+      if (indicator.parentNode) {
+        indicator.style.animation = 'slideOutDown 0.3s ease';
+        setTimeout(() => indicator.remove(), 300);
+      }
+    }, 5000);
+  }
+
+  /**
+   * Format timestamp for display
+   * @param {Date} timestamp - Message timestamp
+   * @returns {string} Formatted timestamp
+   */
+  formatTimestamp(timestamp) {
+    if (!timestamp) return 'now';
+    
+    const now = new Date();
+    const msgTime = new Date(timestamp);
+    const diffMs = now - msgTime;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+    
+    if (diffMins < 1) return 'now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    
+    return msgTime.toLocaleDateString();
+  }
+
+  /**
+   * Render messages with virtual scrolling for performance
+   * @param {HTMLElement} container - Container element
+   * @param {Array} messages - Array of messages
+   */
+  renderVirtualScrollMessages(container, messages) {
+    const totalHeight = messages.length * this.virtualScrolling.itemHeight;
+    container.style.height = `${totalHeight}px`;
+    container.style.position = 'relative';
+    
+    // Create viewport
+    const viewport = document.createElement('div');
+    viewport.className = 'virtual-scroll-viewport';
+    viewport.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      overflow: visible;
+    `;
+    
+    // Initial render of visible items
+    this.updateVirtualScrollView(viewport, messages);
+    
+    // Setup scroll listener for virtual scrolling
+    this.elements.threadArea.addEventListener('scroll', () => {
+      this.updateVirtualScrollView(viewport, messages);
+    });
+    
+    container.appendChild(viewport);
+  }
+
+  /**
+   * Update virtual scroll view
+   * @param {HTMLElement} viewport - Viewport element
+   * @param {Array} messages - Array of messages
+   */
+  updateVirtualScrollView(viewport, messages) {
+    const scrollTop = this.elements.threadArea.scrollTop;
+    const containerHeight = this.elements.threadArea.clientHeight;
+    
+    const startIndex = Math.floor(scrollTop / this.virtualScrolling.itemHeight);
+    const endIndex = Math.min(
+      startIndex + Math.ceil(containerHeight / this.virtualScrolling.itemHeight) + 5,
+      messages.length
+    );
+    
+    // Clear viewport
+    viewport.innerHTML = '';
+    
+    // Render visible messages
+    for (let i = Math.max(0, startIndex - 5); i < endIndex; i++) {
+      const message = messages[i];
+      const messageElement = this.createMessageElement(message);
+      messageElement.style.position = 'absolute';
+      messageElement.style.top = `${i * this.virtualScrolling.itemHeight}px`;
+      messageElement.style.width = '100%';
+      viewport.appendChild(messageElement);
+    }
+  }
+
+  /**
+   * Show typing indicator
+   * @param {string} userName - Name of the user typing
+   */
+  showTypingIndicator(userName = 'User') {
+    if (!this.elements.threadArea) return;
+    
+    // Remove existing typing indicator
+    this.hideTypingIndicator();
+    
+    const messageContainer = this.elements.threadArea.querySelector('.message-container');
+    if (!messageContainer) return;
+    
+    const typingDiv = document.createElement('div');
+    typingDiv.className = 'typing-indicator';
+    typingDiv.id = 'typing-indicator';
+    typingDiv.innerHTML = `
+      <div class="typing-dots">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <span style="margin-left: 8px; font-size: 11px; color: var(--muted);">${userName} is typing...</span>
+    `;
+    
+    messageContainer.appendChild(typingDiv);
+    this.scrollToBottom(true);
+  }
+
+  /**
+   * Hide typing indicator
+   */
+  hideTypingIndicator() {
+    const typingIndicator = document.getElementById('typing-indicator');
+    if (typingIndicator) {
+      typingIndicator.remove();
+    }
+  }
+
+  /**
+   * Setup mobile sidebar functionality
+   */
+  setupMobileSidebar() {
+    // Add click handler to hamburger menu (thread-head::before)
+    if (this.elements.threadArea) {
+      const threadHead = document.querySelector('.thread-head');
+      if (threadHead) {
+        threadHead.addEventListener('click', (e) => {
+          // Check if click is on the left side (hamburger area)
+          if (e.clientX < 50) {
+            this.toggleMobileSidebar();
+          }
+        });
+      }
+    }
+
+    // Close sidebar when clicking outside on mobile
+    document.addEventListener('click', (e) => {
+      const sidebar = document.querySelector('.sidebar');
+      const threadHead = document.querySelector('.thread-head');
+      
+      if (window.innerWidth <= 768 && sidebar && sidebar.classList.contains('open')) {
+        if (!sidebar.contains(e.target) && !threadHead.contains(e.target)) {
+          this.closeMobileSidebar();
+        }
+      }
+    });
+
+    // Close sidebar on conversation selection (mobile)
+    document.addEventListener('selectConversation', () => {
+      if (window.innerWidth <= 768) {
+        this.closeMobileSidebar();
+      }
+    });
+  }
+
+  /**
+   * Toggle mobile sidebar
+   */
+  toggleMobileSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) {
+      sidebar.classList.toggle('open');
+    }
+  }
+
+  /**
+   * Close mobile sidebar
+   */
+  closeMobileSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) {
+      sidebar.classList.remove('open');
+    }
+  }
+
+  /**
+   * Show help modal with keyboard shortcuts
+   */
+  showHelpModal() {
+    const helpModal = document.getElementById('help-modal');
+    if (helpModal) {
+      helpModal.style.display = 'flex';
+      
+      // Close modal when clicking outside
+      helpModal.addEventListener('click', (e) => {
+        if (e.target === helpModal) {
+          helpModal.style.display = 'none';
+        }
+      });
+      
+      // Close modal with Escape key
+      const closeHandler = (e) => {
+        if (e.key === 'Escape') {
+          helpModal.style.display = 'none';
+          document.removeEventListener('keydown', closeHandler);
+        }
+      };
+      document.addEventListener('keydown', closeHandler);
+    }
+  }
+
+  /**
    * Show toast message
    * @param {string} message - Toast message
    */
@@ -355,10 +832,88 @@ class UIManager {
 
     this.elements.toast.textContent = message;
     this.elements.toast.style.display = 'block';
+    this.elements.toast.style.animation = 'slideInRight 0.3s ease';
     
     setTimeout(() => {
-      this.elements.toast.style.display = 'none';
+      this.elements.toast.style.animation = 'slideOutRight 0.3s ease';
+      setTimeout(() => {
+        this.elements.toast.style.display = 'none';
+      }, 300);
     }, this.config.UI.TOAST_DURATION);
+  }
+
+  /**
+   * Handle scroll events for performance optimization
+   */
+  handleScroll() {
+    const isAtBottom = this.isScrolledToBottom();
+    
+    // Hide new message indicator if user scrolls to bottom
+    if (isAtBottom) {
+      const indicator = document.querySelector('.new-message-indicator');
+      if (indicator) {
+        indicator.style.animation = 'slideOutDown 0.3s ease';
+        setTimeout(() => indicator.remove(), 300);
+      }
+    }
+    
+    // Show/hide scroll to bottom indicator
+    if (this.elements.scrollIndicator) {
+      if (isAtBottom) {
+        this.elements.scrollIndicator.style.display = 'none';
+      } else {
+        // Only show if there are enough messages to warrant scrolling
+        const conversation = this.stateManager.getActiveConversation();
+        if (conversation && conversation.messages.length > 3) {
+          this.elements.scrollIndicator.style.display = 'flex';
+        }
+      }
+    }
+  }
+
+  /**
+   * Debounce function for performance optimization
+   * @param {Function} func - Function to debounce
+   * @param {number} wait - Wait time in milliseconds
+   * @returns {Function} Debounced function
+   */
+  debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout);
+        func.apply(this, args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  }
+
+  /**
+   * Optimize image loading with lazy loading
+   * @param {HTMLElement} element - Element containing images
+   */
+  optimizeImages(element) {
+    const images = element.querySelectorAll('img');
+    if ('IntersectionObserver' in window) {
+      const imageObserver = new IntersectionObserver((entries, observer) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            const img = entry.target;
+            img.src = img.dataset.src;
+            img.classList.remove('lazy');
+            observer.unobserve(img);
+          }
+        });
+      });
+
+      images.forEach(img => imageObserver.observe(img));
+    } else {
+      // Fallback for older browsers
+      images.forEach(img => {
+        img.src = img.dataset.src;
+      });
+    }
   }
 
   /**

@@ -117,8 +117,16 @@ class WhatsAppAdminApp {
       },
       
       onUserTyping: (data) => {
-        // Handle typing indicator if needed
         console.log('User typing:', data);
+        const conversation = this.stateManager.findConversationByNumber(data.number);
+        if (conversation && conversation.id === this.stateManager.getState().activeConversationId) {
+          this.uiManager.showTypingIndicator(conversation.name);
+          // Hide typing indicator after 3 seconds of inactivity
+          clearTimeout(this.typingTimeout);
+          this.typingTimeout = setTimeout(() => {
+            this.uiManager.hideTypingIndicator();
+          }, 3000);
+        }
       },
       
       onError: (error) => {
@@ -204,9 +212,9 @@ class WhatsAppAdminApp {
       this.stateManager.addMessage(conversation.id, messageData);
       this.uiManager.showToast(`New message from ${conversation.name}`);
       
-      // If this is the active conversation, refresh the UI
+      // If this is the active conversation, add message with animation
       if (conversation.id === this.stateManager.getState().activeConversationId) {
-        this.uiManager.renderConversationThread();
+        this.uiManager.addMessageWithAnimation(messageData);
       }
     }
   }
@@ -231,6 +239,11 @@ class WhatsAppAdminApp {
         });
         
         this.stateManager.addMessage(conversation.id, messageData);
+        
+        // Add message with animation if it's the active conversation
+        if (conversation.id === this.stateManager.getState().activeConversationId) {
+          this.uiManager.addMessageWithAnimation(messageData);
+        }
       } else {
         this.uiManager.showToast(result.error);
       }
