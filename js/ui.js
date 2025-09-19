@@ -38,6 +38,7 @@ class UIManager {
       threadChips: document.getElementById('chips'),
       threadArea: document.getElementById('area'),
       messageInput: document.getElementById('text'),
+      voiceRecordButton: document.getElementById('voice-record'),
       quickButton: document.getElementById('quick'),
       sendButton: document.getElementById('send'),
       
@@ -56,7 +57,13 @@ class UIManager {
       toast: document.getElementById('toast'),
       
       // Scroll indicator
-      scrollIndicator: document.getElementById('scroll-indicator')
+      scrollIndicator: document.getElementById('scroll-indicator'),
+      
+      // Voice recording elements
+      recordingOverlay: document.getElementById('recording-overlay'),
+      recordingTime: document.getElementById('recording-time'),
+      cancelRecordingButton: document.getElementById('cancel-recording'),
+      stopRecordingButton: document.getElementById('stop-recording')
     };
   }
 
@@ -89,6 +96,13 @@ class UIManager {
     if (this.elements.sendButton) {
       this.elements.sendButton.addEventListener('click', () => {
         this.handleSendMessage();
+      });
+    }
+
+    // Voice recording
+    if (this.elements.voiceRecordButton) {
+      this.elements.voiceRecordButton.addEventListener('click', () => {
+        this.toggleVoiceRecording();
       });
     }
 
@@ -159,6 +173,9 @@ class UIManager {
 
     // Setup audio message handlers
     this.setupAudioMessageHandlers();
+
+    // Setup voice recording handlers
+    this.setupVoiceRecordingHandlers();
   }
 
   /**
@@ -1033,6 +1050,259 @@ class UIManager {
     const minutes = Math.floor(seconds / 60);
     const remainingSeconds = Math.floor(seconds % 60);
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  }
+
+  /**
+   * Setup voice recording event handlers
+   */
+  setupVoiceRecordingHandlers() {
+    // Initialize voice recording state
+    this.voiceRecording = {
+      isRecording: false,
+      mediaRecorder: null,
+      audioChunks: [],
+      startTime: null,
+      timerInterval: null
+    };
+
+    // Recording overlay event listeners
+    if (this.elements.cancelRecordingButton) {
+      this.elements.cancelRecordingButton.addEventListener('click', () => {
+        this.cancelVoiceRecording();
+      });
+    }
+
+    if (this.elements.stopRecordingButton) {
+      this.elements.stopRecordingButton.addEventListener('click', () => {
+        this.stopVoiceRecording();
+      });
+    }
+
+    // Close recording on escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.voiceRecording.isRecording) {
+        this.cancelVoiceRecording();
+      }
+    });
+  }
+
+  /**
+   * Toggle voice recording on/off
+   */
+  async toggleVoiceRecording() {
+    if (!this.stateManager.getState().isManualMode) {
+      this.showToast('Activate "Take control" to send voice notes.');
+      return;
+    }
+
+    if (this.voiceRecording.isRecording) {
+      this.stopVoiceRecording();
+    } else {
+      await this.startVoiceRecording();
+    }
+  }
+
+  /**
+   * Start voice recording
+   */
+  async startVoiceRecording() {
+    try {
+      // Request microphone permission
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
+      // Initialize MediaRecorder
+      this.voiceRecording.mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
+
+      this.voiceRecording.audioChunks = [];
+      this.voiceRecording.isRecording = true;
+      this.voiceRecording.startTime = Date.now();
+
+      // Setup MediaRecorder events
+      this.voiceRecording.mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          this.voiceRecording.audioChunks.push(event.data);
+        }
+      };
+
+      this.voiceRecording.mediaRecorder.onstop = () => {
+        this.processRecordedAudio();
+        stream.getTracks().forEach(track => track.stop()); // Stop microphone
+      };
+
+      // Start recording
+      this.voiceRecording.mediaRecorder.start();
+
+      // Update UI
+      this.elements.voiceRecordButton.classList.add('recording');
+      this.elements.recordingOverlay.style.display = 'flex';
+      
+      // Start timer
+      this.startRecordingTimer();
+
+      console.log('Voice recording started');
+
+    } catch (error) {
+      console.error('Error starting voice recording:', error);
+      
+      if (error.name === 'NotAllowedError') {
+        this.showToast('Microphone permission denied. Please allow access to record voice notes.');
+      } else if (error.name === 'NotFoundError') {
+        this.showToast('No microphone found. Please connect a microphone.');
+      } else {
+        this.showToast('Error starting voice recording. Please try again.');
+      }
+    }
+  }
+
+  /**
+   * Stop voice recording and send
+   */
+  stopVoiceRecording() {
+    if (!this.voiceRecording.isRecording) return;
+
+    console.log('Stopping voice recording...');
+    this.voiceRecording.mediaRecorder.stop();
+    this.resetRecordingUI();
+  }
+
+  /**
+   * Cancel voice recording without sending
+   */
+  cancelVoiceRecording() {
+    if (!this.voiceRecording.isRecording) return;
+
+    console.log('Cancelling voice recording...');
+    this.voiceRecording.mediaRecorder.stop();
+    this.voiceRecording.audioChunks = []; // Clear audio data
+    this.resetRecordingUI();
+    this.showToast('Voice recording cancelled');
+  }
+
+  /**
+   * Process recorded audio and send
+   */
+  async processRecordedAudio() {
+    if (this.voiceRecording.audioChunks.length === 0) return;
+
+    try {
+      // Create audio blob
+      const audioBlob = new Blob(this.voiceRecording.audioChunks, { 
+        type: 'audio/webm;codecs=opus' 
+      });
+
+      console.log('Processing recorded audio, size:', audioBlob.size, 'bytes');
+
+      // Convert to base64
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64Audio = reader.result.split(',')[1]; // Remove "data:audio/webm;base64,"
+        console.log('Audio converted to base64, length:', base64Audio.length);
+        
+        // Send via API
+        this.sendVoiceMessage(base64Audio);
+      };
+      
+      reader.readAsDataURL(audioBlob);
+
+    } catch (error) {
+      console.error('Error processing recorded audio:', error);
+      this.showToast('Error processing voice recording');
+    }
+  }
+
+  /**
+   * Send voice message via API
+   * @param {string} base64Audio - Base64 encoded audio data
+   */
+  async sendVoiceMessage(base64Audio) {
+    const conversation = this.stateManager.getActiveConversation();
+    if (!conversation) {
+      this.showToast('No conversation selected');
+      return;
+    }
+
+    try {
+      // Use the existing API service to send voice message
+      const result = await window.app.apiService.sendVoiceMessage(conversation.number, base64Audio);
+      
+      if (result.success) {
+        this.showToast('Voice message sent successfully');
+        
+        // Add message to local state for immediate feedback
+        const messageData = {
+          id: Date.now(),
+          from: 'admin',
+          type: 4, // Admin intervention
+          label: '👨‍💼 Admin Voice',
+          color: 'out',
+          text: '🎵 Voice Message',
+          isAudio: true,
+          audioData: base64Audio,
+          audioUrl: window.app.apiService.convertBase64ToAudioUrl(`data:audio/webm;base64,${base64Audio}`),
+          timestamp: new Date()
+        };
+        
+        this.stateManager.addMessage(conversation.id, messageData);
+        this.addMessageWithAnimation(messageData);
+        
+      } else {
+        this.showToast(result.error || 'Failed to send voice message');
+      }
+    } catch (error) {
+      console.error('Error sending voice message:', error);
+      this.showToast('Failed to send voice message');
+    }
+  }
+
+  /**
+   * Start recording timer
+   */
+  startRecordingTimer() {
+    this.voiceRecording.timerInterval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - this.voiceRecording.startTime) / 1000);
+      const minutes = Math.floor(elapsed / 60);
+      const seconds = elapsed % 60;
+      
+      if (this.elements.recordingTime) {
+        this.elements.recordingTime.textContent = 
+          `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      }
+
+      // Auto-stop after 5 minutes
+      if (elapsed >= 300) {
+        this.stopVoiceRecording();
+        this.showToast('Recording stopped: 5 minute limit reached');
+      }
+    }, 1000);
+  }
+
+  /**
+   * Reset recording UI to initial state
+   */
+  resetRecordingUI() {
+    this.voiceRecording.isRecording = false;
+    
+    // Clear timer
+    if (this.voiceRecording.timerInterval) {
+      clearInterval(this.voiceRecording.timerInterval);
+      this.voiceRecording.timerInterval = null;
+    }
+
+    // Reset UI elements
+    this.elements.voiceRecordButton.classList.remove('recording');
+    this.elements.recordingOverlay.style.display = 'none';
+    
+    if (this.elements.recordingTime) {
+      this.elements.recordingTime.textContent = '00:00';
+    }
   }
 
   /**

@@ -48,12 +48,67 @@
     .msg[data-type="4"] { border-left: 3px solid #ff6b6b; } /* Admin */
 
     /* composer */
-    .composer{display:grid;grid-template-columns: 1fr auto auto;gap:8px;padding:10px;border-top:1px solid var(--line);background:var(--panel)}
+    .composer{display:grid;grid-template-columns: 1fr auto auto auto;gap:8px;padding:10px;border-top:1px solid var(--line);background:var(--panel)}
     .composer textarea{width:100%;min-height:40px;resize:vertical;background:#0f191f;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px}
     button{border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600}
     .takeover{background:var(--yellow);color:#1b1b1b}
     .send{background:var(--green);color:#00170f}
     .quick{background:#0f191f;color:var(--muted)}
+    
+    /* Voice recording button */
+    .voice-record{
+      background:#0f191f;color:var(--muted);min-width:40px;height:40px;
+      display:flex;align-items:center;justify-content:center;font-size:16px;
+      transition:all 0.3s ease;position:relative;
+    }
+    .voice-record:hover{background:var(--chip);color:var(--accent)}
+    .voice-record.recording{
+      background:var(--red);color:white;animation:pulse 1.5s ease-in-out infinite;
+    }
+    .voice-record.recording::after{
+      content:'';position:absolute;width:100%;height:100%;border-radius:8px;
+      border:2px solid var(--red);animation:recording-pulse 1.5s ease-in-out infinite;
+    }
+    
+    /* Recording animations */
+    @keyframes recording-pulse{
+      0%{transform:scale(1);opacity:1}
+      100%{transform:scale(1.3);opacity:0}
+    }
+    
+    /* Recording indicator overlay */
+    .recording-overlay{
+      position:fixed;top:0;left:0;width:100%;height:100%;
+      background:rgba(0,0,0,0.8);z-index:2000;display:none;
+      align-items:center;justify-content:center;flex-direction:column;
+    }
+    .recording-indicator{
+      background:var(--panel);border:1px solid var(--line);
+      padding:32px;border-radius:16px;text-align:center;max-width:300px;
+    }
+    .recording-waveform{
+      display:flex;justify-content:center;gap:3px;margin:20px 0;
+    }
+    .recording-bar{
+      width:4px;height:20px;background:var(--red);border-radius:2px;
+      animation:recording-waveform 1.2s ease-in-out infinite;
+    }
+    .recording-bar:nth-child(1){animation-delay:0s;height:15px}
+    .recording-bar:nth-child(2){animation-delay:0.1s;height:25px}
+    .recording-bar:nth-child(3){animation-delay:0.2s;height:18px}
+    .recording-bar:nth-child(4){animation-delay:0.3s;height:30px}
+    .recording-bar:nth-child(5){animation-delay:0.4s;height:22px}
+    .recording-bar:nth-child(6){animation-delay:0.5s;height:16px}
+    
+    @keyframes recording-waveform{
+      0%,100%{transform:scaleY(0.3);opacity:0.7}
+      50%{transform:scaleY(1);opacity:1}
+    }
+    
+    .recording-time{font-size:24px;font-weight:600;color:var(--red);margin:10px 0}
+    .recording-actions{display:flex;gap:12px;margin-top:20px}
+    .cancel-recording{background:var(--muted);color:var(--bg)}
+    .stop-recording{background:var(--red);color:white}
 
     /* RIGHT: info */
     .right{background:var(--panel);border-left:1px solid var(--line);display:flex;flex-direction:column}
@@ -290,7 +345,7 @@
       /* Mobile composer */
       .composer{
         padding:12px;
-        grid-template-columns:1fr auto;
+        grid-template-columns:1fr auto auto;
         gap:8px;
         background:var(--panel);
         border-top:1px solid var(--line);
@@ -389,6 +444,11 @@
       .avatar{width:36px;height:36px;font-size:12px}
       .title{font-size:14px}
       .meta{font-size:11px}
+      
+      /* Mobile voice recording adjustments */
+      .voice-record{min-width:36px;height:36px;font-size:14px}
+      .composer{grid-template-columns: 1fr auto auto;gap:4px}
+      .quick{display:none}
     }
     
     /* Tablet styles (769px - 1024px) */
@@ -449,6 +509,7 @@
     <div class="area" id="area"></div>
     <div class="composer">
       <textarea id="text" placeholder="Write to intervene manually..."></textarea>
+      <button class="voice-record" id="voice-record" title="Record voice note">🎙️</button>
       <button class="quick" id="quick">Quick Replies</button>
       <button class="send" id="send">Send</button>
     </div>
@@ -508,6 +569,26 @@
   ↓
 </div>
 
+<!-- Voice Recording Overlay -->
+<div class="recording-overlay" id="recording-overlay">
+  <div class="recording-indicator">
+    <div style="font-size: 18px; font-weight: 600; margin-bottom: 16px; color: var(--ink);">Recording Voice Note</div>
+    <div class="recording-waveform">
+      <div class="recording-bar"></div>
+      <div class="recording-bar"></div>
+      <div class="recording-bar"></div>
+      <div class="recording-bar"></div>
+      <div class="recording-bar"></div>
+      <div class="recording-bar"></div>
+    </div>
+    <div class="recording-time" id="recording-time">00:00</div>
+    <div class="recording-actions">
+      <button class="cancel-recording" id="cancel-recording">Cancel</button>
+      <button class="stop-recording" id="stop-recording">Stop & Send</button>
+    </div>
+  </div>
+</div>
+
 <!-- Help Modal -->
 <div class="help-modal" id="help-modal">
   <div class="help-content">
@@ -535,6 +616,10 @@
     <div class="help-shortcut">
       <div class="help-desc">Send message</div>
       <div class="help-key">Enter</div>
+    </div>
+    <div class="help-shortcut">
+      <div class="help-desc">Record voice note</div>
+      <div class="help-key">🎙️ Click</div>
     </div>
     <div class="help-shortcut">
       <div class="help-desc">Show this help</div>

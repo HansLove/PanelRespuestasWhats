@@ -108,6 +108,48 @@ class ApiService {
   }
 
   /**
+   * Send a voice message to a contact
+   * @param {string} phoneNumber - The phone number to send to
+   * @param {string} base64Audio - Base64 encoded audio data
+   * @returns {Promise<Object>} Send result
+   */
+  async sendVoiceMessage(phoneNumber, base64Audio) {
+    try {
+      console.log('Sending voice message to:', phoneNumber, 'Audio length:', base64Audio.length);
+      
+      const response = await fetch(`${this.config.API_BASE}${this.config.ENDPOINTS.SEND_INTERVENTION}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          number: phoneNumber,
+          audio: base64Audio
+        })
+      });
+      
+      const responseData = await response.json();
+      console.log('Voice message API response:', responseData);
+      
+      if (response.ok) {
+        return {
+          success: true,
+          data: responseData
+        };
+      } else {
+        return {
+          success: false,
+          error: responseData.message || 'Failed to send voice message'
+        };
+      }
+    } catch (error) {
+      console.error('Error sending voice message:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
    * Map conversation data from API response to internal format
    * @param {Object} number - Raw conversation data from API
    * @param {number} index - Index for generating ID
