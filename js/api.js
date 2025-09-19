@@ -156,15 +156,139 @@ class ApiService {
   mapMessageData(msg) {
     const messageType = this.config.MESSAGE_TYPES[msg.typo] || { from: 'unknown', label: 'Unknown', color: 'in' };
     
-    return {
+    const mappedMessage = {
       id: msg.id,
       from: messageType.from,
       type: msg.typo,
       label: messageType.label,
       color: messageType.color,
       text: msg.message,
-      timestamp: new Date() // You might want to add timestamp to your API
+      timestamp: new Date(), // You might want to add timestamp to your API
+      isAudio: msg.isaudio || false
     };
+
+    // Handle audio messages
+    if (msg.isaudio && msg.message) {
+      console.log('Processing audio message:', msg.id, 'Base64 length:', msg.message.length);
+      mappedMessage.audioData = msg.message;
+      mappedMessage.audioUrl = this.convertBase64ToAudioUrl(msg.message);
+      mappedMessage.text = '🎵 Audio Message';
+      console.log('Audio URL created:', mappedMessage.audioUrl ? 'Success' : 'Failed');
+    }
+
+    return mappedMessage;
+  }
+
+  /**
+   * Convert base64 audio data to blob URL
+   * @param {string} base64Data - Base64 encoded audio data
+   * @returns {string} Blob URL for audio playback
+   */
+  convertBase64ToAudioUrl(base64Data) {
+    try {
+      if (!base64Data || typeof base64Data !== 'string') {
+        console.error('Invalid base64 data provided');
+        return null;
+      }
+
+      console.log('Converting base64 audio, data length:', base64Data.length);
+      
+      // Detect MIME type from base64 data or use default
+      let mimeType = 'audio/mp4';
+      
+      // Check if data URL format with MIME type
+      if (base64Data.startsWith('data:')) {
+        const mimeMatch = base64Data.match(/^data:([^;]+);base64,/);
+        if (mimeMatch) {
+          mimeType = mimeMatch[1];
+          console.log('Detected MIME type from data URL:', mimeType);
+        }
+      }
+      
+      // Auto-detect common audio formats from base64 header
+      const base64Audio = base64Data.replace(/^data:[^;]+;base64,/, '');
+      
+      // Validate base64 format
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64Audio)) {
+        console.error('Invalid base64 format');
+        return null;
+      }
+      
+      try {
+        const binaryStart = atob(base64Audio.substring(0, 20));
+        
+        // Check magic bytes for common audio formats
+        if (binaryStart.includes('ftyp')) {
+          mimeType = 'audio/mp4';
+        } else if (binaryStart.includes('ID3') || binaryStart.startsWith('\xFF\xFB')) {
+          mimeType = 'audio/mpeg';
+        } else if (binaryStart.includes('OggS')) {
+          mimeType = 'audio/ogg';
+        } else if (binaryStart.includes('RIFF') && binaryStart.includes('WAVE')) {
+          mimeType = 'audio/wav';
+        }
+        
+        console.log('Detected audio format:', mimeType);
+      } catch (headerError) {
+        console.warn('Could not detect audio format from header, using default:', mimeType);
+      }
+      
+      // Convert base64 to binary
+      const binaryString = atob(base64Audio);
+      const bytes = new Uint8Array(binaryString.length);
+      
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      // Create blob with detected MIME type
+      const blob = new Blob([bytes], { type: mimeType });
+      console.log('Created audio blob:', blob.size, 'bytes, type:', mimeType);
+      
+      // Create and return blob URL
+      const blobUrl = URL.createObjectURL(blob);
+      console.log('Generated blob URL:', blobUrl);
+      return blobUrl;
+    } catch (error) {
+      console.error('Error converting base64 to audio URL:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Cleanup blob URLs to prevent memory leaks
+   * @param {Array} messages - Array of messages
+   */
+  cleanupAudioBlobs(messages) {
+    messages.forEach(message => {
+      if (message.audioUrl && message.audioUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(message.audioUrl);
+      }
+    });
+  }
+
+  /**
+   * Test audio message processing with sample data
+   * @param {string} base64Data - Sample base64 audio data
+   */
+  testAudioMessage(base64Data) {
+    console.log('=== TESTING AUDIO MESSAGE ===');
+    const testMessage = {
+      id: 86,
+      typo: 4,
+      message: base64Data,
+      isaudio: true
+    };
+    
+    const mappedMessage = this.mapMessageData(testMessage);
+    console.log('Mapped message result:', {
+      id: mappedMessage.id,
+      isAudio: mappedMessage.isAudio,
+      hasAudioUrl: !!mappedMessage.audioUrl,
+      text: mappedMessage.text
+    });
+    
+    return mappedMessage;
   }
 
   /**

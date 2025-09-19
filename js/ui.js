@@ -156,6 +156,9 @@ class UIManager {
         this.scrollToBottom(true);
       });
     }
+
+    // Setup audio message handlers
+    this.setupAudioMessageHandlers();
   }
 
   /**
@@ -417,12 +420,22 @@ class UIManager {
     div.setAttribute('data-type', message.type);
     div.setAttribute('data-message-id', message.id);
     
-    // Add message content with better formatting
-    const messageText = message.text?.replace(/</g, '&lt;').replace(/\n/g, '<br>') || '';
     const timestamp = this.formatTimestamp(message.timestamp);
     
+    let messageContent;
+    
+    // Handle audio messages
+    if (message.isAudio && message.audioUrl) {
+      console.log('Creating audio player for message:', message.id, 'Audio URL:', message.audioUrl);
+      messageContent = this.createAudioPlayer(message);
+    } else {
+      // Regular text message
+      const messageText = message.text?.replace(/</g, '&lt;').replace(/\n/g, '<br>') || '';
+      messageContent = `<div class="message-content">${messageText}</div>`;
+    }
+    
     div.innerHTML = `
-      <div class="message-content">${messageText}</div>
+      ${messageContent}
       <div class="stamp">${message.label} • ${timestamp}</div>
     `;
     
@@ -437,6 +450,47 @@ class UIManager {
     });
     
     return div;
+  }
+
+  /**
+   * Create audio player for audio messages
+   * @param {Object} message - Message data with audio
+   * @returns {string} HTML string for audio player
+   */
+  createAudioPlayer(message) {
+    const audioId = `audio-${message.id}`;
+    const playButtonId = `play-${message.id}`;
+    const progressId = `progress-${message.id}`;
+    const timeId = `time-${message.id}`;
+    
+    return `
+      <div class="audio-message">
+        <div class="audio-controls">
+          <button class="audio-play-btn" id="${playButtonId}" data-audio-id="${audioId}">
+            <span class="play-icon">▶</span>
+            <span class="pause-icon" style="display:none">⏸</span>
+          </button>
+          <div class="audio-progress">
+            <div class="audio-waveform">
+              <div class="waveform-bar"></div>
+              <div class="waveform-bar"></div>
+              <div class="waveform-bar"></div>
+              <div class="waveform-bar"></div>
+              <div class="waveform-bar"></div>
+              <div class="waveform-bar"></div>
+              <div class="waveform-bar"></div>
+              <div class="waveform-bar"></div>
+            </div>
+            <div class="audio-progress-bar">
+              <div class="progress-fill" id="${progressId}"></div>
+            </div>
+          </div>
+          <div class="audio-time" id="${timeId}">0:00</div>
+          <button class="audio-download-btn" title="Download audio">⬇</button>
+        </div>
+        <audio id="${audioId}" src="${message.audioUrl}" preload="metadata"></audio>
+      </div>
+    `;
   }
 
   /**
@@ -795,6 +849,190 @@ class UIManager {
     if (sidebar) {
       sidebar.classList.remove('open');
     }
+  }
+
+  /**
+   * Setup audio message event handlers
+   */
+  setupAudioMessageHandlers() {
+    // Use event delegation for audio controls
+    document.addEventListener('click', (e) => {
+      // Handle play/pause button clicks
+      if (e.target.closest('.audio-play-btn')) {
+        const button = e.target.closest('.audio-play-btn');
+        const audioId = button.getAttribute('data-audio-id');
+        this.toggleAudioPlayback(audioId, button);
+      }
+      
+      // Handle download button clicks
+      if (e.target.closest('.audio-download-btn')) {
+        const audioMessage = e.target.closest('.audio-message');
+        const audioElement = audioMessage.querySelector('audio');
+        this.downloadAudio(audioElement);
+      }
+    });
+
+    // Handle progress bar clicks for seeking
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('.audio-progress-bar')) {
+        const progressBar = e.target.closest('.audio-progress-bar');
+        const audioMessage = progressBar.closest('.audio-message');
+        const audioElement = audioMessage.querySelector('audio');
+        this.seekAudio(e, progressBar, audioElement);
+      }
+    });
+  }
+
+  /**
+   * Toggle audio playback
+   * @param {string} audioId - Audio element ID
+   * @param {HTMLElement} button - Play button element
+   */
+  toggleAudioPlayback(audioId, button) {
+    const audioElement = document.getElementById(audioId);
+    if (!audioElement) return;
+
+    const playIcon = button.querySelector('.play-icon');
+    const pauseIcon = button.querySelector('.pause-icon');
+    const waveformBars = button.closest('.audio-message').querySelectorAll('.waveform-bar');
+
+    if (audioElement.paused) {
+      // Stop all other audio elements
+      this.stopAllAudio();
+      
+      // Play this audio
+      audioElement.play().then(() => {
+        playIcon.style.display = 'none';
+        pauseIcon.style.display = 'inline';
+        waveformBars.forEach(bar => bar.classList.add('playing'));
+        this.startAudioProgressTracking(audioElement);
+      }).catch(error => {
+        console.error('Error playing audio:', error);
+        this.showToast('Error playing audio');
+      });
+    } else {
+      // Pause audio
+      audioElement.pause();
+      playIcon.style.display = 'inline';
+      pauseIcon.style.display = 'none';
+      waveformBars.forEach(bar => bar.classList.remove('playing'));
+    }
+  }
+
+  /**
+   * Stop all audio playback
+   */
+  stopAllAudio() {
+    const allAudioElements = document.querySelectorAll('audio');
+    const allPlayButtons = document.querySelectorAll('.audio-play-btn');
+    const allWaveformBars = document.querySelectorAll('.waveform-bar');
+
+    allAudioElements.forEach(audio => {
+      audio.pause();
+      audio.currentTime = 0;
+    });
+
+    allPlayButtons.forEach(button => {
+      const playIcon = button.querySelector('.play-icon');
+      const pauseIcon = button.querySelector('.pause-icon');
+      if (playIcon && pauseIcon) {
+        playIcon.style.display = 'inline';
+        pauseIcon.style.display = 'none';
+      }
+    });
+
+    allWaveformBars.forEach(bar => {
+      bar.classList.remove('playing');
+    });
+  }
+
+  /**
+   * Start tracking audio progress
+   * @param {HTMLAudioElement} audioElement - Audio element
+   */
+  startAudioProgressTracking(audioElement) {
+    const messageId = audioElement.id.replace('audio-', '');
+    const progressFill = document.getElementById(`progress-${messageId}`);
+    const timeDisplay = document.getElementById(`time-${messageId}`);
+
+    const updateProgress = () => {
+      if (!audioElement.paused) {
+        const progress = (audioElement.currentTime / audioElement.duration) * 100;
+        if (progressFill) {
+          progressFill.style.width = `${progress}%`;
+        }
+        
+        if (timeDisplay) {
+          timeDisplay.textContent = this.formatAudioTime(audioElement.currentTime);
+        }
+        
+        requestAnimationFrame(updateProgress);
+      }
+    };
+
+    // Handle audio end
+    audioElement.addEventListener('ended', () => {
+      const button = document.getElementById(`play-${messageId}`);
+      if (button) {
+        const playIcon = button.querySelector('.play-icon');
+        const pauseIcon = button.querySelector('.pause-icon');
+        const waveformBars = button.closest('.audio-message').querySelectorAll('.waveform-bar');
+        
+        playIcon.style.display = 'inline';
+        pauseIcon.style.display = 'none';
+        waveformBars.forEach(bar => bar.classList.remove('playing'));
+        
+        if (progressFill) progressFill.style.width = '0%';
+        if (timeDisplay) timeDisplay.textContent = '0:00';
+      }
+    });
+
+    updateProgress();
+  }
+
+  /**
+   * Seek audio to specific position
+   * @param {Event} e - Click event
+   * @param {HTMLElement} progressBar - Progress bar element
+   * @param {HTMLAudioElement} audioElement - Audio element
+   */
+  seekAudio(e, progressBar, audioElement) {
+    const rect = progressBar.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const percentage = clickX / rect.width;
+    const newTime = percentage * audioElement.duration;
+    
+    if (!isNaN(newTime)) {
+      audioElement.currentTime = newTime;
+    }
+  }
+
+  /**
+   * Download audio file
+   * @param {HTMLAudioElement} audioElement - Audio element
+   */
+  downloadAudio(audioElement) {
+    const link = document.createElement('a');
+    link.href = audioElement.src;
+    link.download = `audio-message-${Date.now()}.mp4`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    this.showToast('Audio download started');
+  }
+
+  /**
+   * Format audio time in MM:SS format
+   * @param {number} seconds - Time in seconds
+   * @returns {string} Formatted time
+   */
+  formatAudioTime(seconds) {
+    if (isNaN(seconds)) return '0:00';
+    
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
   }
 
   /**
