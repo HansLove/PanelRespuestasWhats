@@ -181,6 +181,9 @@ class UIManager {
 
     // Populate voice dropdown
     this.populateVoiceDropdown();
+
+    // Setup mobile navigation
+    this.setupMobileNavigation();
   }
 
   /**
@@ -817,7 +820,135 @@ class UIManager {
   }
 
   /**
-   * Setup mobile sidebar functionality
+   * Setup mobile navigation system
+   */
+  setupMobileNavigation() {
+    // Check if we're on mobile
+    this.isMobile = window.innerWidth <= 768;
+    
+    // Show/hide mobile navigation based on screen size
+    this.updateMobileLayout();
+    
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      const wasMobile = this.isMobile;
+      this.isMobile = window.innerWidth <= 768;
+      
+      if (wasMobile !== this.isMobile) {
+        this.updateMobileLayout();
+      }
+    });
+    
+    // Setup mobile navigation buttons
+    const mobileNavButtons = document.querySelectorAll('.mobile-nav-btn');
+    mobileNavButtons.forEach(button => {
+      button.addEventListener('click', (e) => {
+        const panelName = e.currentTarget.getAttribute('data-panel');
+        this.switchMobilePanel(panelName);
+      });
+    });
+    
+    // Auto-switch to chat panel when conversation is selected
+    document.addEventListener('selectConversation', () => {
+      if (this.isMobile) {
+        this.switchMobilePanel('thread');
+      }
+    });
+  }
+
+  /**
+   * Update mobile layout based on screen size
+   */
+  updateMobileLayout() {
+    const mobileNav = document.getElementById('mobile-nav');
+    const mobilePanels = document.getElementById('mobile-panels');
+    const app = document.getElementById('app');
+    
+    if (this.isMobile) {
+      // Show mobile navigation
+      if (mobileNav) mobileNav.style.display = 'flex';
+      if (mobilePanels) mobilePanels.style.display = 'block';
+      
+      // Ensure panels have mobile classes
+      const panels = ['sidebar', 'thread', 'right'];
+      panels.forEach(panelName => {
+        const panel = document.querySelector(`.${panelName}`);
+        if (panel) {
+          panel.classList.remove('active');
+        }
+      });
+      
+      // Activate first panel (sidebar)
+      const sidebar = document.querySelector('.sidebar');
+      if (sidebar) sidebar.classList.add('active');
+      
+    } else {
+      // Hide mobile navigation
+      if (mobileNav) mobileNav.style.display = 'none';
+      if (mobilePanels) mobilePanels.style.display = 'none';
+      
+      // Remove mobile classes and restore desktop layout
+      const panels = ['sidebar', 'thread', 'right'];
+      panels.forEach(panelName => {
+        const panel = document.querySelector(`.${panelName}`);
+        if (panel) {
+          panel.classList.remove('active');
+          panel.style.transform = '';
+        }
+      });
+    }
+  }
+
+  /**
+   * Switch mobile panel
+   * @param {string} panelName - Name of panel to switch to
+   */
+  switchMobilePanel(panelName) {
+    if (!this.isMobile) return;
+    
+    console.log('Switching to mobile panel:', panelName);
+    
+    // Update navigation buttons
+    const navButtons = document.querySelectorAll('.mobile-nav-btn');
+    navButtons.forEach(btn => {
+      const btnPanel = btn.getAttribute('data-panel');
+      if (btnPanel === panelName) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+    
+    // Update panels
+    const panels = ['sidebar', 'thread', 'right'];
+    panels.forEach(currentPanelName => {
+      const panel = document.querySelector(`.${currentPanelName}`);
+      if (panel) {
+        if (currentPanelName === panelName) {
+          panel.classList.add('active');
+        } else {
+          panel.classList.remove('active');
+        }
+      }
+    });
+    
+    // Show toast for better UX feedback
+    const panelNames = {
+      sidebar: 'Conversations',
+      thread: 'Chat',
+      right: 'Contact Card'
+    };
+    
+    if (panelNames[panelName]) {
+      // Don't show toast for sidebar as it's the default
+      if (panelName !== 'sidebar') {
+        this.showToast(`Switched to ${panelNames[panelName]}`);
+      }
+    }
+  }
+
+  /**
+   * Setup mobile sidebar functionality (legacy - now part of mobile navigation)
    */
   setupMobileSidebar() {
     // Add click handler to hamburger menu (thread-head::before)
