@@ -839,19 +839,27 @@ class UIManager {
       }
     });
     
-    // Setup mobile navigation buttons
+    // Setup mobile navigation buttons with debugging
     const mobileNavButtons = document.querySelectorAll('.mobile-nav-btn');
-    mobileNavButtons.forEach(button => {
+    console.log('Found mobile nav buttons:', mobileNavButtons.length);
+    
+    mobileNavButtons.forEach((button, index) => {
+      const panelName = button.getAttribute('data-panel');
+      console.log(`Setting up nav button ${index}:`, panelName);
+      
       button.addEventListener('click', (e) => {
-        const panelName = e.currentTarget.getAttribute('data-panel');
-        this.switchMobilePanel(panelName);
+        e.preventDefault();
+        e.stopPropagation();
+        const targetPanel = e.currentTarget.getAttribute('data-panel');
+        console.log('Mobile nav clicked:', targetPanel);
+        this.switchMobilePanel(targetPanel);
       });
     });
     
     // Auto-switch to chat panel when conversation is selected
     document.addEventListener('selectConversation', () => {
       if (this.isMobile) {
-        this.switchMobilePanel('thread');
+        this.switchMobilePanel('chat');
       }
     });
   }
@@ -860,16 +868,26 @@ class UIManager {
    * Update mobile layout based on screen size
    */
   updateMobileLayout() {
+    console.log('Updating mobile layout, isMobile:', this.isMobile);
+    
     const mobileNav = document.getElementById('mobile-nav');
-    const mobilePanels = document.getElementById('mobile-panels');
-    const app = document.getElementById('app');
+    const mainContent = document.getElementById('main-content');
     
     if (this.isMobile) {
-      // Show mobile navigation
-      if (mobileNav) mobileNav.style.display = 'flex';
-      if (mobilePanels) mobilePanels.style.display = 'block';
+      console.log('Setting up mobile layout');
       
-      // Ensure panels have mobile classes
+      // Force mobile navigation to show
+      if (mobileNav) {
+        mobileNav.style.display = 'flex';
+        console.log('Mobile nav shown');
+      }
+      
+      if (mainContent) {
+        mainContent.style.display = 'block';
+        console.log('Main content shown');
+      }
+      
+      // Reset all panels
       const panels = ['sidebar', 'thread', 'right'];
       panels.forEach(panelName => {
         const panel = document.querySelector(`.${panelName}`);
@@ -878,16 +896,32 @@ class UIManager {
         }
       });
       
-      // Activate first panel (sidebar)
+      // Activate conversations panel by default
       const sidebar = document.querySelector('.sidebar');
-      if (sidebar) sidebar.classList.add('active');
+      if (sidebar) {
+        sidebar.classList.add('active');
+        console.log('Sidebar activated');
+      }
+      
+      // Reset nav buttons
+      const navButtons = document.querySelectorAll('.mobile-nav-btn');
+      navButtons.forEach(btn => btn.classList.remove('active'));
+      
+      // Activate conversations nav button
+      const conversationsBtn = document.querySelector('.mobile-nav-btn[data-panel="conversations"]');
+      if (conversationsBtn) {
+        conversationsBtn.classList.add('active');
+        console.log('Conversations nav button activated');
+      }
       
     } else {
-      // Hide mobile navigation
-      if (mobileNav) mobileNav.style.display = 'none';
-      if (mobilePanels) mobilePanels.style.display = 'none';
+      console.log('Setting up desktop layout');
       
-      // Remove mobile classes and restore desktop layout
+      // Hide mobile navigation on desktop
+      if (mobileNav) mobileNav.style.display = 'none';
+      if (mainContent) mainContent.style.display = 'grid';
+      
+      // Remove all mobile classes
       const panels = ['sidebar', 'thread', 'right'];
       panels.forEach(panelName => {
         const panel = document.querySelector(`.${panelName}`);
@@ -896,6 +930,8 @@ class UIManager {
           panel.style.transform = '';
         }
       });
+      
+      console.log('Desktop layout restored');
     }
   }
 
@@ -904,47 +940,66 @@ class UIManager {
    * @param {string} panelName - Name of panel to switch to
    */
   switchMobilePanel(panelName) {
-    if (!this.isMobile) return;
+    console.log('switchMobilePanel called with:', panelName, 'isMobile:', this.isMobile);
     
-    console.log('Switching to mobile panel:', panelName);
+    if (!this.isMobile) {
+      console.log('Not mobile, skipping panel switch');
+      return;
+    }
+    
+    // Map new panel names to CSS classes
+    const panelMapping = {
+      'conversations': 'sidebar',
+      'chat': 'thread',
+      'contact': 'right'
+    };
+    
+    const cssClass = panelMapping[panelName] || panelName;
+    console.log('Mapped to CSS class:', cssClass);
     
     // Update navigation buttons
     const navButtons = document.querySelectorAll('.mobile-nav-btn');
+    console.log('Found nav buttons:', navButtons.length);
+    
     navButtons.forEach(btn => {
       const btnPanel = btn.getAttribute('data-panel');
       if (btnPanel === panelName) {
         btn.classList.add('active');
+        console.log('Activated nav button:', btnPanel);
       } else {
         btn.classList.remove('active');
       }
     });
     
-    // Update panels
+    // Update panels with smooth animation
     const panels = ['sidebar', 'thread', 'right'];
     panels.forEach(currentPanelName => {
       const panel = document.querySelector(`.${currentPanelName}`);
+      console.log(`Panel ${currentPanelName}:`, panel ? 'found' : 'NOT FOUND');
+      
       if (panel) {
-        if (currentPanelName === panelName) {
+        if (currentPanelName === cssClass) {
           panel.classList.add('active');
+          console.log('Activated panel:', currentPanelName);
         } else {
           panel.classList.remove('active');
+          console.log('Deactivated panel:', currentPanelName);
         }
       }
     });
     
-    // Show toast for better UX feedback
-    const panelNames = {
-      sidebar: 'Conversations',
-      thread: 'Chat',
-      right: 'Contact Card'
-    };
-    
-    if (panelNames[panelName]) {
-      // Don't show toast for sidebar as it's the default
-      if (panelName !== 'sidebar') {
-        this.showToast(`Switched to ${panelNames[panelName]}`);
-      }
+    // Visual feedback for important actions
+    if (panelName === 'contact') {
+      setTimeout(() => {
+        const toggleButton = document.getElementById('toggle');
+        if (toggleButton) {
+          toggleButton.style.animation = 'pulse 1s ease-in-out 2';
+          console.log('Added pulse animation to toggle button');
+        }
+      }, 500);
     }
+    
+    console.log('Panel switch completed');
   }
 
   /**
