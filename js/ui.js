@@ -60,6 +60,7 @@ class UIManager {
       scrollIndicator: document.getElementById('scroll-indicator'),
       
       // Voice recording elements
+      voiceDropdown: document.getElementById('voice-dropdown'),
       recordingOverlay: document.getElementById('recording-overlay'),
       recordingTime: document.getElementById('recording-time'),
       cancelRecordingButton: document.getElementById('cancel-recording'),
@@ -99,10 +100,11 @@ class UIManager {
       });
     }
 
-    // Voice recording
+    // Voice recording menu
     if (this.elements.voiceRecordButton) {
-      this.elements.voiceRecordButton.addEventListener('click', () => {
-        this.toggleVoiceRecording();
+      this.elements.voiceRecordButton.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleVoiceDropdown();
       });
     }
 
@@ -176,6 +178,9 @@ class UIManager {
 
     // Setup voice recording handlers
     this.setupVoiceRecordingHandlers();
+
+    // Populate voice dropdown
+    this.populateVoiceDropdown();
   }
 
   /**
@@ -1053,6 +1058,60 @@ class UIManager {
   }
 
   /**
+   * Populate voice dropdown with options from config
+   */
+  populateVoiceDropdown() {
+    if (!this.elements.voiceDropdown) return;
+
+    console.log('Populating voice dropdown with predefined notes:', this.config.PREDEFINED_VOICE_NOTES);
+
+    // Create record option
+    const recordOption = document.createElement('div');
+    recordOption.className = 'voice-option record-option';
+    recordOption.setAttribute('data-action', 'record');
+    recordOption.innerHTML = `
+      <span class="voice-icon">🎙️</span>
+      <div class="voice-details">
+        <div class="voice-name">Record New</div>
+        <div class="voice-desc">Record a new voice note</div>
+      </div>
+    `;
+
+    // Create separator
+    const separator = document.createElement('div');
+    separator.className = 'voice-separator';
+
+    // Add to dropdown
+    this.elements.voiceDropdown.appendChild(recordOption);
+    this.elements.voiceDropdown.appendChild(separator);
+
+    // Create predefined options
+    this.config.PREDEFINED_VOICE_NOTES.forEach(voiceNote => {
+      const option = document.createElement('div');
+      option.className = 'voice-option';
+      option.setAttribute('data-action', 'predefined');
+      option.setAttribute('data-voice-id', voiceNote.id);
+      
+      // Extract emoji from name (first character if it's an emoji)
+      const emoji = voiceNote.name.match(/^[\u{1F600}-\u{1F64F}]|^[\u{1F300}-\u{1F5FF}]|^[\u{1F680}-\u{1F6FF}]|^[\u{1F1E0}-\u{1F1FF}]|^[\u{2600}-\u{26FF}]|^[\u{2700}-\u{27BF}]/u);
+      const icon = emoji ? emoji[0] : '🎵';
+      const name = voiceNote.name.replace(/^[\u{1F600}-\u{1F64F}]|^[\u{1F300}-\u{1F5FF}]|^[\u{1F680}-\u{1F6FF}]|^[\u{1F1E0}-\u{1F1FF}]|^[\u{2600}-\u{26FF}]|^[\u{2700}-\u{27BF}]/u, '').trim();
+      
+      option.innerHTML = `
+        <span class="voice-icon">${icon}</span>
+        <div class="voice-details">
+          <div class="voice-name">${name}</div>
+          <div class="voice-desc">${voiceNote.description}</div>
+        </div>
+      `;
+
+      this.elements.voiceDropdown.appendChild(option);
+    });
+
+    console.log('Voice dropdown populated with', this.elements.voiceDropdown.children.length, 'options');
+  }
+
+  /**
    * Setup voice recording event handlers
    */
   setupVoiceRecordingHandlers() {
@@ -1078,27 +1137,146 @@ class UIManager {
       });
     }
 
+    // Voice dropdown option handlers
+    document.addEventListener('click', (e) => {
+      const voiceOption = e.target.closest('.voice-option');
+      if (voiceOption) {
+        this.handleVoiceOptionClick(voiceOption);
+        return;
+      }
+      
+      // Close dropdown when clicking outside
+      if (!e.target.closest('.voice-menu-container')) {
+        this.hideVoiceDropdown();
+      }
+    });
+
     // Close recording on escape key
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && this.voiceRecording.isRecording) {
-        this.cancelVoiceRecording();
+      if (e.key === 'Escape') {
+        if (this.voiceRecording.isRecording) {
+          this.cancelVoiceRecording();
+        } else {
+          this.hideVoiceDropdown();
+        }
       }
     });
   }
 
   /**
-   * Toggle voice recording on/off
+   * Toggle voice dropdown menu
    */
-  async toggleVoiceRecording() {
+  toggleVoiceDropdown() {
+    console.log('Toggle voice dropdown clicked');
+    
     if (!this.stateManager.getState().isManualMode) {
       this.showToast('Activate "Take control" to send voice notes.');
       return;
     }
 
-    if (this.voiceRecording.isRecording) {
-      this.stopVoiceRecording();
+    if (this.elements.voiceDropdown) {
+      const isVisible = this.elements.voiceDropdown.classList.contains('show');
+      console.log('Dropdown currently visible:', isVisible);
+      console.log('Dropdown element:', this.elements.voiceDropdown);
+      console.log('Dropdown children count:', this.elements.voiceDropdown.children.length);
+      
+      if (isVisible) {
+        this.hideVoiceDropdown();
+      } else {
+        this.showVoiceDropdown();
+      }
     } else {
+      console.error('Voice dropdown element not found!');
+    }
+  }
+
+  /**
+   * Show voice dropdown menu
+   */
+  showVoiceDropdown() {
+    console.log('Showing voice dropdown');
+    if (this.elements.voiceDropdown) {
+      this.elements.voiceDropdown.classList.add('show');
+      console.log('Added show class, dropdown should be visible');
+      console.log('Dropdown display style:', window.getComputedStyle(this.elements.voiceDropdown).display);
+    }
+  }
+
+  /**
+   * Hide voice dropdown menu
+   */
+  hideVoiceDropdown() {
+    if (this.elements.voiceDropdown) {
+      this.elements.voiceDropdown.classList.remove('show');
+    }
+  }
+
+  /**
+   * Handle voice option click
+   * @param {HTMLElement} optionElement - Clicked option element
+   */
+  async handleVoiceOptionClick(optionElement) {
+    const action = optionElement.getAttribute('data-action');
+    const voiceId = optionElement.getAttribute('data-voice-id');
+
+    this.hideVoiceDropdown();
+
+    if (action === 'record') {
       await this.startVoiceRecording();
+    } else if (action === 'predefined' && voiceId) {
+      this.sendPredefinedVoiceNote(voiceId);
+    }
+  }
+
+  /**
+   * Send predefined voice note
+   * @param {string} voiceId - ID of the predefined voice note
+   */
+  async sendPredefinedVoiceNote(voiceId) {
+    const predefinedVoice = this.config.PREDEFINED_VOICE_NOTES.find(voice => voice.id === voiceId);
+    if (!predefinedVoice) {
+      this.showToast('Voice note not found');
+      return;
+    }
+
+    const conversation = this.stateManager.getActiveConversation();
+    if (!conversation) {
+      this.showToast('No conversation selected');
+      return;
+    }
+
+    try {
+      console.log('Sending predefined voice note:', predefinedVoice.name);
+      
+      // Use the existing API service to send voice message
+      const result = await window.app.apiService.sendVoiceMessage(conversation.number, predefinedVoice.base64);
+      
+      if (result.success) {
+        this.showToast(`${predefinedVoice.name} sent successfully`);
+        
+        // Add message to local state for immediate feedback
+        const messageData = {
+          id: Date.now(),
+          from: 'admin',
+          type: 4, // Admin intervention
+          label: `👨‍💼 Admin - ${predefinedVoice.name}`,
+          color: 'out',
+          text: `🎵 ${predefinedVoice.name}`,
+          isAudio: true,
+          audioData: predefinedVoice.base64,
+          audioUrl: window.app.apiService.convertBase64ToAudioUrl(`data:audio/mp4;base64,${predefinedVoice.base64}`),
+          timestamp: new Date()
+        };
+        
+        this.stateManager.addMessage(conversation.id, messageData);
+        this.addMessageWithAnimation(messageData);
+        
+      } else {
+        this.showToast(result.error || 'Failed to send voice note');
+      }
+    } catch (error) {
+      console.error('Error sending predefined voice note:', error);
+      this.showToast('Failed to send voice note');
     }
   }
 
