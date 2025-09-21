@@ -43,6 +43,17 @@
 
 1. **index.html** - Main application file with full mobile navigation
 2. **admin-modular.html** - Simplified admin interface with mobile fixes
+3. **responsive-test.html** - Test page to verify responsive behavior
+
+## 🖥️ Desktop Layout Preservation
+
+**IMPORTANT**: Desktop layout has been preserved and enhanced:
+- ✅ **Three-column horizontal layout** maintained for desktop (≥769px)
+- ✅ **Proper grid system** with sidebar (360px), main content (flexible), and right panel (320px)
+- ✅ **Desktop-specific styles** override mobile styles using `@media (min-width: 769px)`
+- ✅ **Original composer layout** restored for desktop with Quick Replies button visible
+- ✅ **No mobile navigation** shown on desktop
+- ✅ **Smooth transitions** between mobile and desktop breakpoints
 
 ## 🧪 Testing Instructions
 
@@ -136,3 +147,12 @@ console.log('Safe area insets:', {
 ---
 
 **Note**: These fixes specifically target iPhone Safari and should significantly improve the mobile user experience for typing and sending messages.
+
+
+
+
+Mexican number con red UK funciona, @LuisV
+
+
+
+

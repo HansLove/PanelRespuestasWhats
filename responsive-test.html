@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Responsive Layout Test</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0b141a;
+      color: #e9edef;
+    }
+    
+    .test-container {
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    
+    .screen-info {
+      background: #111b21;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border: 1px solid #1f2c34;
+    }
+    
+    .layout-demo {
+      border: 2px solid #53bdeb;
+      border-radius: 8px;
+      min-height: 200px;
+      display: grid;
+      gap: 2px;
+      background: #53bdeb;
+    }
+    
+    /* Desktop layout */
+    @media (min-width: 769px) {
+      .layout-demo {
+        grid-template-columns: 360px 1fr 320px;
+      }
+      .panel {
+        background: #111b21;
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+      }
+      .panel.left { background: #202c33; }
+      .panel.center { background: #0f191f; }
+      .panel.right { background: #1f2c34; }
+    }
+    
+    /* Mobile layout */
+    @media (max-width: 768px) {
+      .layout-demo {
+        grid-template-columns: 1fr;
+        grid-template-rows: 60px 1fr;
+        min-height: 300px;
+      }
+      .panel {
+        background: #111b21;
+        padding: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 14px;
+      }
+      .mobile-nav {
+        background: #202c33;
+        display: flex;
+        align-items: center;
+        justify-content: space-around;
+        grid-column: 1;
+        grid-row: 1;
+      }
+      .mobile-content {
+        background: #0f191f;
+        grid-column: 1;
+        grid-row: 2;
+      }
+      .panel.left, .panel.right { display: none; }
+    }
+    
+    .status {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .desktop { background: #00a884; color: white; }
+    .mobile { background: #53bdeb; color: white; }
+    
+    .test-input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #1f2c34;
+      border-radius: 8px;
+      background: #0f191f;
+      color: #e9edef;
+      font-size: 16px;
+      margin-top: 10px;
+    }
+    
+    .test-input:focus {
+      outline: 2px solid #53bdeb;
+      outline-offset: 2px;
+    }
+  </style>
+</head>
+<body>
+  <div class="test-container">
+    <h1>📱💻 Responsive Layout Test</h1>
+    
+    <div class="screen-info">
+      <h3>Current Screen Info:</h3>
+      <p><strong>Width:</strong> <span id="screen-width"></span>px</p>
+      <p><strong>Height:</strong> <span id="screen-height"></span>px</p>
+      <p><strong>Layout Mode:</strong> <span id="layout-mode" class="status"></span></p>
+      <p><strong>User Agent:</strong> <span id="user-agent"></span></p>
+    </div>
+    
+    <h3>Layout Demonstration:</h3>
+    <div class="layout-demo">
+      <!-- Desktop panels -->
+      <div class="panel left">LEFT SIDEBAR<br>(Conversations)</div>
+      <div class="panel center">CENTER THREAD<br>(Chat Area)</div>
+      <div class="panel right">RIGHT PANEL<br>(Contact Info)</div>
+      
+      <!-- Mobile panels -->
+      <div class="mobile-nav">📱 Mobile Navigation</div>
+      <div class="mobile-content panel">Mobile Content Area<br>(Stacked Layout)</div>
+    </div>
+    
+    <h3>Input Field Test (iPhone Zoom Prevention):</h3>
+    <input type="text" class="test-input" placeholder="Test typing here (should not zoom on iPhone)" />
+    <textarea class="test-input" placeholder="Test textarea (should handle keyboard properly)" rows="3"></textarea>
+    
+    <div style="margin-top: 20px; padding: 15px; background: #111b21; border-radius: 8px; font-size: 14px;">
+      <h4>✅ Expected Behavior:</h4>
+      <ul>
+        <li><strong>Desktop (≥769px):</strong> Three-column horizontal layout</li>
+        <li><strong>Mobile (≤768px):</strong> Stacked vertical layout with navigation</li>
+        <li><strong>iPhone:</strong> No zoom on input focus, proper keyboard handling</li>
+        <li><strong>Safe Areas:</strong> Content respects iPhone notches and home indicator</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    function updateScreenInfo() {
+      document.getElementById('screen-width').textContent = window.innerWidth;
+      document.getElementById('screen-height').textContent = window.innerHeight;
+      document.getElementById('user-agent').textContent = navigator.userAgent.substring(0, 80) + '...';
+      
+      const layoutMode = document.getElementById('layout-mode');
+      if (window.innerWidth >= 769) {
+        layoutMode.textContent = 'DESKTOP';
+        layoutMode.className = 'status desktop';
+      } else {
+        layoutMode.textContent = 'MOBILE';
+        layoutMode.className = 'status mobile';
+      }
+    }
+    
+    // Update on load and resize
+    updateScreenInfo();
+    window.addEventListener('resize', updateScreenInfo);
+    
+    // iPhone viewport height fix (same as main app)
+    function setVH() {
+      let vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    }
+    setVH();
+    window.addEventListener('resize', setVH);
+    
+    // Test iPhone keyboard detection
+    if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+      let initialHeight = window.innerHeight;
+      window.addEventListener('resize', function() {
+        const currentHeight = window.innerHeight;
+        const heightDiff = initialHeight - currentHeight;
+        
+        if (heightDiff > 150) {
+          console.log('🎹 Keyboard detected (height change:', heightDiff, 'px)');
+          document.body.style.backgroundColor = '#1a0a0a'; // Dark red tint
+        } else {
+          console.log('📱 Normal view restored');
+          document.body.style.backgroundColor = '#0b141a'; // Original color
+        }
+      });
+    }
+  </script>
+</body>
+</html>

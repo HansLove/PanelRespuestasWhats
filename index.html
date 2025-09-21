@@ -21,8 +21,34 @@
     }
     *{box-sizing:border-box}
     html,body{height:100%}
-    body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial}
-    .app{height:100%;display:grid;grid-template-columns: 360px 1fr 320px}
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--ink);
+      font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      /* Default desktop body - no safe area padding */
+    }
+    
+    /* Desktop layout - default */
+    .app{
+      height:100%;
+      display:block;
+      position: relative;
+    }
+    
+    /* Default main-content for desktop */
+    .main-content {
+      display: grid;
+      grid-template-columns: 360px 1fr 320px;
+      grid-template-rows: 1fr;
+      height: 100%;
+      width: 100%;
+    }
+    
+    /* Hide mobile navigation by default (desktop) */
+    .mobile-nav {
+      display: none;
+    }
 
     /* LEFT: chats list */
     .sidebar{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column}
@@ -289,6 +315,134 @@
     button:hover{transform:translateY(-1px);box-shadow:0 2px 4px rgba(0,0,0,0.2)}
     button:active{transform:translateY(0)}
     
+    /* Desktop specific styles - ensure panels are properly positioned */
+    @media (min-width: 769px) {
+      body {
+        overflow: initial !important;
+        padding: 0 !important;
+      }
+      
+      .app {
+        height: 100vh !important;
+        width: 100vw !important;
+        display: block !important;
+        position: relative !important;
+        overflow: hidden !important;
+      }
+      
+      .sidebar, .thread, .right {
+        position: static !important;
+        transform: none !important;
+        width: auto !important;
+        height: 100% !important;
+        z-index: auto !important;
+        transition: none !important;
+      }
+      
+      .sidebar {
+        background: var(--panel);
+        border-right: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+      }
+      
+      .thread {
+        display: flex;
+        flex-direction: column;
+        background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="%23111b21"/><path d="M0 16h32M16 0v32" stroke="%231f2c34" stroke-width="1"/></svg>');
+      }
+      
+      .right {
+        background: var(--panel);
+        border-left: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+      }
+      
+      /* Reset mobile composer styles for desktop */
+      .composer {
+        display: grid !important;
+        grid-template-columns: 1fr auto auto auto !important;
+        gap: 8px !important;
+        padding: 10px !important;
+        border-top: 1px solid var(--line);
+        background: var(--panel);
+        position: static !important;
+        transform: none !important;
+        z-index: auto !important;
+      }
+      
+      .composer textarea {
+        width: 100%;
+        min-height: 40px;
+        resize: vertical;
+        background: #0f191f;
+        color: var(--ink);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 8px;
+        font-size: 14px !important;
+        touch-action: auto;
+      }
+      
+      .send {
+        background: var(--green);
+        color: #00170f;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 12px;
+        cursor: pointer;
+        font-weight: 600;
+        min-width: auto;
+        height: auto;
+        border-radius: 8px;
+        display: initial;
+        align-items: initial;
+        justify-content: initial;
+        font-size: 14px;
+      }
+      
+      .quick {
+        display: block !important;
+        background: #0f191f;
+        color: var(--muted);
+      }
+      
+      .voice-record {
+        min-width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        font-size: 16px;
+      }
+      
+      /* Hide mobile navigation completely on desktop */
+      .mobile-nav {
+        display: none !important;
+      }
+      
+      .main-content {
+        display: grid !important;
+        grid-template-columns: 360px 1fr 320px !important;
+        grid-template-rows: 1fr !important;
+        width: 100% !important;
+        height: 100% !important;
+        position: static !important;
+        overflow: visible !important;
+      }
+      
+      /* Ensure panels are proper grid items */
+      .main-content > .sidebar,
+      .main-content > .thread,
+      .main-content > .right {
+        display: flex !important;
+        flex-direction: column !important;
+        position: static !important;
+        transform: none !important;
+        width: auto !important;
+        height: 100% !important;
+      }
+    }
+    
     /* Hide mobile navigation on desktop */
     .mobile-nav, .mobile-panels {
       display: none;
@@ -301,7 +455,7 @@
         overflow:hidden;
         margin:0;
         padding:0;
-        /* iPhone safe area support */
+        /* iPhone safe area support - mobile only */
         padding-top: var(--safe-area-inset-top);
         padding-left: var(--safe-area-inset-left);
         padding-right: var(--safe-area-inset-right);
