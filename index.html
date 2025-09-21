@@ -2,13 +2,22 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <title>Broadcast Ops Console — Admin (Modular)</title>
   <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
   <style>
     :root{
       --bg:#0b141a; --panel:#111b21; --ink:#e9edef; --muted:#aebac1; --accent:#53bdeb; --line:#1f2c34;
       --green:#00a884; --red:#ff6b6b; --yellow:#ffd166; --chip:#202c33; --incoming:#202c33; --outgoing:#005c4b;
+      
+      /* Safe area insets for iPhone */
+      --safe-area-inset-top: env(safe-area-inset-top);
+      --safe-area-inset-right: env(safe-area-inset-right);
+      --safe-area-inset-bottom: env(safe-area-inset-bottom);
+      --safe-area-inset-left: env(safe-area-inset-left);
+      
+      /* Dynamic viewport height for mobile keyboards */
+      --vh: 1vh;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
@@ -287,10 +296,20 @@
     
     /* === MOBILE RESPONSIVE DESIGN === */
     @media (max-width: 768px) {
-      body{font-size:14px;overflow:hidden;margin:0;padding:0}
+      body{
+        font-size:14px;
+        overflow:hidden;
+        margin:0;
+        padding:0;
+        /* iPhone safe area support */
+        padding-top: var(--safe-area-inset-top);
+        padding-left: var(--safe-area-inset-left);
+        padding-right: var(--safe-area-inset-right);
+      }
       
       .app{
-        height:100vh;
+        height: calc(var(--vh, 1vh) * 100);
+        min-height: -webkit-fill-available;
         width:100vw;
         display:flex;
         flex-direction:column;
@@ -485,12 +504,16 @@
       
       /* === MOBILE COMPOSER === */
       .composer{
-        padding:16px;
+        padding: calc(16px + var(--safe-area-inset-bottom)) 16px 16px 16px;
         grid-template-columns:1fr auto auto;
         gap:12px;
         background:var(--panel);
         border-top:1px solid var(--line);
         flex-shrink:0;
+        position: relative;
+        z-index: 100;
+        /* Ensure composer stays above keyboard */
+        transform: translateZ(0);
       }
       
       .composer textarea{
@@ -500,6 +523,24 @@
         border-radius:24px;
         border:1px solid var(--line);
         background:var(--bg);
+        /* Prevent iOS zoom on focus */
+        font-size: 16px !important;
+        /* Better touch target */
+        touch-action: manipulation;
+        /* Prevent textarea resize on mobile */
+        resize: none;
+        /* Ensure proper keyboard behavior */
+        -webkit-appearance: none;
+        appearance: none;
+      }
+      
+      /* Fix for iOS keyboard overlay */
+      .composer textarea:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        /* Ensure input stays visible above keyboard */
+        position: relative;
+        z-index: 101;
       }
       
       .send{
@@ -672,6 +713,56 @@
       input:focus, textarea:focus{
         outline:2px solid var(--accent);
         outline-offset:2px;
+      }
+      
+      /* iPhone specific fixes */
+      @supports (-webkit-touch-callout: none) {
+        .app {
+          /* Use dynamic viewport height for iOS */
+          height: calc(var(--vh, 1vh) * 100);
+          min-height: -webkit-fill-available;
+        }
+        
+        .composer {
+          /* Extra bottom padding for iPhone home indicator */
+          padding-bottom: calc(16px + var(--safe-area-inset-bottom, 20px));
+          /* Stick to bottom on iOS */
+          position: sticky;
+          bottom: 0;
+        }
+        
+        .composer textarea {
+          /* Prevent zoom on iOS */
+          font-size: 16px !important;
+          transform: scale(1);
+          /* Fix for iOS keyboard behavior */
+          -webkit-user-select: text;
+          user-select: text;
+        }
+        
+        /* Fix for iOS keyboard pushing content */
+        .thread.active {
+          padding-bottom: var(--safe-area-inset-bottom, 0px);
+        }
+      }
+      
+      /* Keyboard open state for iPhone */
+      body.keyboard-open .composer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 1000;
+        background: var(--panel);
+        box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
+      }
+      
+      body.keyboard-open .thread.active {
+        padding-bottom: 100px; /* Space for fixed composer */
+      }
+      
+      body.keyboard-open .area {
+        padding-bottom: 20px;
       }
       
       /* Improve scrollbar on mobile */
@@ -935,6 +1026,49 @@
     <button class="help-close" onclick="document.getElementById('help-modal').style.display='none'">Close</button>
   </div>
 </div>
+
+<!-- iPhone viewport height fix -->
+<script>
+// Fix for iPhone viewport height and keyboard handling
+function setVH() {
+  let vh = window.innerHeight * 0.01;
+  document.documentElement.style.setProperty('--vh', `${vh}px`);
+}
+
+// Set initial viewport height
+setVH();
+
+// Update on resize (keyboard open/close)
+window.addEventListener('resize', setVH);
+
+// Additional iPhone keyboard handling
+if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+  // Prevent zoom on input focus
+  document.addEventListener('touchstart', function() {}, {passive: true});
+  
+  // Handle keyboard show/hide
+  let initialViewportHeight = window.innerHeight;
+  
+  window.addEventListener('resize', function() {
+    const currentHeight = window.innerHeight;
+    const heightDifference = initialViewportHeight - currentHeight;
+    
+    // Keyboard is likely open if height decreased by more than 150px
+    if (heightDifference > 150) {
+      document.body.classList.add('keyboard-open');
+      // Scroll to focused element
+      setTimeout(() => {
+        const focused = document.activeElement;
+        if (focused && focused.tagName === 'TEXTAREA') {
+          focused.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 300);
+    } else {
+      document.body.classList.remove('keyboard-open');
+    }
+  });
+}
+</script>
 
 <!-- Load modular JavaScript files -->
 <script src="js/config.js"></script>
