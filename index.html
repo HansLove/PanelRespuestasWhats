@@ -68,11 +68,11 @@
 
     /* CENTER: thread */
     .thread{display:flex;flex-direction:column;background:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="%23111b21"/><path d="M0 16h32M16 0v32" stroke="%231f2c34" stroke-width="1"/></svg>')}
-    .thread-head{display:flex;align-items:center;gap:10px;padding:12px;border-bottom:1px solid var(--line);background:var(--panel)}
+    .thread-head{display:flex;align-items:center;gap:10px;padding:12px;border-bottom:1px solid var(--line);background:var(--panel);flex-shrink:0}
     .thread-head .name{font-weight:600}
     .chips{display:flex;gap:6px;flex-wrap:wrap}
     .chip{background:var(--chip);border:1px solid var(--line);color:var(--muted);font-size:11px;border-radius:999px;padding:3px 8px}
-    .area{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth;position:relative}
+    .area{flex:1;overflow-y:auto;overflow-x:hidden;padding:16px;display:flex;flex-direction:column;gap:8px;scroll-behavior:smooth;position:relative;min-height:0}
     .in{align-self:flex-start;background:var(--incoming)}
     .out{align-self:flex-end;background:var(--outgoing)}
     
@@ -83,7 +83,7 @@
     .msg[data-type="4"] { border-left: 3px solid #ff6b6b; } /* Admin */
 
     /* composer */
-    .composer{display:grid;grid-template-columns: 1fr auto auto auto;gap:8px;padding:10px;border-top:1px solid var(--line);background:var(--panel)}
+    .composer{display:grid;grid-template-columns: 1fr auto auto auto;gap:8px;padding:10px;border-top:1px solid var(--line);background:var(--panel);flex-shrink:0}
     .composer textarea{width:100%;min-height:40px;resize:vertical;background:#0f191f;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px}
     button{border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600}
     .takeover{background:var(--yellow);color:#1b1b1b}
@@ -350,6 +350,8 @@
         display: flex;
         flex-direction: column;
         background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="%23111b21"/><path d="M0 16h32M16 0v32" stroke="%231f2c34" stroke-width="1"/></svg>');
+        height: 100%;
+        min-height: 0;
       }
       
       .right {
@@ -370,6 +372,26 @@
         position: static !important;
         transform: none !important;
         z-index: auto !important;
+        flex-shrink: 0 !important;
+      }
+      
+      /* Desktop area styles for proper scrolling */
+      .area {
+        flex: 1 !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        min-height: 0 !important;
+        height: auto !important;
+        max-height: calc(100vh - 120px) !important;
+      }
+      
+      /* Desktop message container styles */
+      .message-container {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 8px !important;
+        min-height: 100% !important;
+        padding-bottom: 20px !important;
       }
       
       .composer textarea {
