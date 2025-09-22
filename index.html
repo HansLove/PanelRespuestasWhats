@@ -317,8 +317,10 @@
     
     /* Desktop specific styles - ensure panels are properly positioned */
     @media (min-width: 769px) {
-      body {
-        overflow: initial !important;
+      html, body {
+        height: 100% !important;
+        overflow: hidden !important;
+        margin: 0 !important;
         padding: 0 !important;
       }
       
@@ -347,11 +349,12 @@
       }
       
       .thread {
-        display: flex;
-        flex-direction: column;
+        display: flex !important;
+        flex-direction: column !important;
         background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" fill="%23111b21"/><path d="M0 16h32M16 0v32" stroke="%231f2c34" stroke-width="1"/></svg>');
-        height: 100%;
-        min-height: 0;
+        height: 100% !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
       }
       
       .right {
@@ -359,6 +362,13 @@
         border-left: 1px solid var(--line);
         display: flex;
         flex-direction: column;
+      }
+      
+      /* Ensure thread head doesn't interfere with layout */
+      .thread-head {
+        flex-shrink: 0 !important;
+        height: auto !important;
+        min-height: 60px !important;
       }
       
       /* Reset mobile composer styles for desktop */
@@ -373,16 +383,20 @@
         transform: none !important;
         z-index: auto !important;
         flex-shrink: 0 !important;
+        height: auto !important;
+        min-height: 60px !important;
       }
       
       /* Desktop area styles for proper scrolling */
       .area {
-        flex: 1 !important;
+        flex: 1 1 0 !important;
         overflow-y: auto !important;
         overflow-x: hidden !important;
         min-height: 0 !important;
-        height: auto !important;
-        max-height: calc(100vh - 120px) !important;
+        height: 0 !important;
+        max-height: none !important;
+        display: flex !important;
+        flex-direction: column !important;
       }
       
       /* Desktop message container styles */
@@ -447,9 +461,9 @@
         grid-template-columns: 360px 1fr 320px !important;
         grid-template-rows: 1fr !important;
         width: 100% !important;
-        height: 100% !important;
+        height: 100vh !important;
         position: static !important;
-        overflow: visible !important;
+        overflow: hidden !important;
       }
       
       /* Ensure panels are proper grid items */
